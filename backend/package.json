@@ -1,0 +1,36 @@
+{
+  "name": "@trellis/hrms-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HRMS SaaS Platform API — Phase 0/1 (Auth/IAM, Core HR, Leave, Attendance)",
+  "type": "module",
+  "packageManager": "pnpm@12.4.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "db:init": "tsx scripts/init-db.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/jwt": "^9.0.1",
+    "@fastify/sensible": "^6.0.1",
+    "fastify": "^5.2.1",
+    "pg": "^8.23.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

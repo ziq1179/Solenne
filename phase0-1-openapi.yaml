@@ -1,0 +1,559 @@
+openapi: 3.0.3
+info:
+  title: HRMS Platform API — Phase 0/1
+  version: "0.1.0"
+  description: >
+    Core API surface for Phase 0/1: Auth/IAM, Core HR, Leave Management,
+    Attendance. All endpoints are tenant-scoped via the authenticated JWT —
+    tenant_id is never accepted as a request parameter.
+servers:
+  - url: https://api.yourhrms.com/api/v1
+    description: Production
+  - url: https://staging-api.yourhrms.com/api/v1
+    description: Staging
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Client-generated UUID; required on all mutating requests.
+    PageParam:
+      name: page
+      in: query
+      schema: { type: integer, default: 1, minimum: 1 }
+    PageSizeParam:
+      name: pageSize
+      in: query
+      schema: { type: integer, default: 25, maximum: 100 }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object }
+
+    Employee:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employeeNumber: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        workEmail: { type: string, format: email }
+        departmentId: { type: string, format: uuid, nullable: true }
+        locationId: { type: string, format: uuid, nullable: true }
+        managerEmployeeId: { type: string, format: uuid, nullable: true }
+        jobTitle: { type: string, nullable: true }
+        employmentType: { type: string, enum: [full_time, part_time, contractor] }
+        employmentStatus: { type: string, enum: [active, on_leave, terminated] }
+        hireDate: { type: string, format: date }
+        terminationDate: { type: string, format: date, nullable: true }
+        customFields: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, employeeNumber, firstName, lastName, employmentType, employmentStatus, hireDate]
+
+    EmployeeCreateRequest:
+      type: object
+      required: [firstName, lastName, hireDate, employmentType]
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        personalEmail: { type: string, format: email }
+        workEmail: { type: string, format: email }
+        departmentId: { type: string, format: uuid }
+        locationId: { type: string, format: uuid }
+        managerEmployeeId: { type: string, format: uuid }
+        jobTitle: { type: string }
+        employmentType: { type: string, enum: [full_time, part_time, contractor] }
+        hireDate: { type: string, format: date }
+        customFields: { type: object, additionalProperties: true }
+
+    Department:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        parentId: { type: string, format: uuid, nullable: true }
+        costCenter: { type: string, nullable: true }
+
+    LeaveType:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        accrualDaysPerYear: { type: number }
+        carryForwardMaxDays: { type: number }
+        requiresApproval: { type: boolean }
+
+    LeaveBalance:
+      type: object
+      properties:
+        leaveTypeId: { type: string, format: uuid }
+        year: { type: integer }
+        accruedDays: { type: number }
+        usedDays: { type: number }
+        carriedOverDays: { type: number }
+        remainingDays: { type: number }
+
+    LeaveRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        leaveTypeId: { type: string, format: uuid }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        daysRequested: { type: number }
+        status: { type: string, enum: [pending, approved, rejected, cancelled] }
+        reason: { type: string, nullable: true }
+        submittedVia: { type: string, enum: [web, mobile, ai_agent] }
+        createdAt: { type: string, format: date-time }
+
+    LeaveRequestCreate:
+      type: object
+      required: [leaveTypeId, startDate, endDate]
+      properties:
+        leaveTypeId: { type: string, format: uuid }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        reason: { type: string }
+
+    LeaveDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approved, rejected] }
+        decisionNote: { type: string }
+
+    AttendanceClockIn:
+      type: object
+      properties:
+        source: { type: string, enum: [web, mobile, biometric], default: web }
+        geo:
+          type: object
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+
+    AttendanceRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        clockInAt: { type: string, format: date-time }
+        clockOutAt: { type: string, format: date-time, nullable: true }
+        totalMinutes: { type: integer, nullable: true }
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        actorType: { type: string, enum: [user, ai_agent, system] }
+        actorId: { type: string, format: uuid, nullable: true }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+
+paths:
+  /auth/login:
+    post:
+      summary: Authenticate and receive an access + refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, tenantSubdomain]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+                tenantSubdomain: { type: string }
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: integer }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/refresh:
+    post:
+      summary: Exchange a refresh token for a new access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  expiresIn: { type: integer }
+
+  /auth/me:
+    get:
+      summary: Get the current authenticated user and permission set
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  email: { type: string }
+                  roles: { type: array, items: { type: string } }
+                  permissions: { type: array, items: { type: string } }
+                  employeeId: { type: string, format: uuid, nullable: true }
+
+  /employees:
+    get:
+      summary: List employees (scoped by requester's permissions)
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: departmentId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, on_leave, terminated] }
+      responses:
+        "200":
+          description: Paginated employee list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Employee" }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  total: { type: integer }
+    post:
+      summary: Create a new employee record
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmployeeCreateRequest" }
+      responses:
+        "201":
+          description: Employee created; emits `employee.hired` event
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Employee" }
+        "403":
+          description: Insufficient permissions (requires employee:write)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /employees/{employeeId}:
+    parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get a single employee record
+      responses:
+        "200":
+          description: Employee found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Employee" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    patch:
+      summary: Update an employee record (creates employment_history row if job_title/department/manager changes)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Employee" }
+    delete:
+      summary: Offboard an employee (soft delete; sets employmentStatus=terminated, emits `employee.terminated`)
+      responses:
+        "204":
+          description: Offboarded
+
+  /departments:
+    get:
+      summary: List departments
+      responses:
+        "200":
+          description: Department list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Department" }
+    post:
+      summary: Create a department
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                parentId: { type: string, format: uuid }
+                costCenter: { type: string }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Department" }
+
+  /leave-types:
+    get:
+      summary: List leave types configured for this tenant
+      responses:
+        "200":
+          description: Leave type list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LeaveType" }
+
+  /employees/{employeeId}/leave-balances:
+    parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get an employee's leave balances for the current year
+      responses:
+        "200":
+          description: Leave balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LeaveBalance" }
+
+  /leave-requests:
+    get:
+      summary: List leave requests (managers see their reports'; employees see their own)
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, approved, rejected, cancelled] }
+        - name: employeeId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Paginated leave requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/LeaveRequest" }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  total: { type: integer }
+    post:
+      summary: Submit a leave request (also callable by the AI Agent tool `submit_leave_request` on the employee's behalf)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeaveRequestCreate" }
+      responses:
+        "201":
+          description: Created; emits `leave.requested`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeaveRequest" }
+        "422":
+          description: Insufficient leave balance
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /leave-requests/{requestId}/decision:
+    parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      summary: Approve or reject a leave request (requires leave:approve)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeaveDecision" }
+      responses:
+        "200":
+          description: Decision recorded; emits `leave.approved` or `leave.rejected`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeaveRequest" }
+
+  /attendance/clock-in:
+    post:
+      summary: Clock in the authenticated employee
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AttendanceClockIn" }
+      responses:
+        "201":
+          description: Clocked in; emits `attendance.clocked_in`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttendanceRecord" }
+        "409":
+          description: Already clocked in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /attendance/clock-out:
+    post:
+      summary: Clock out the authenticated employee's open attendance record
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Clocked out; emits `attendance.clocked_out`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttendanceRecord" }
+        "404":
+          description: No open clock-in found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /employees/{employeeId}/attendance:
+    parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: List an employee's attendance records
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AttendanceRecord" }
+
+  /audit-logs:
+    get:
+      summary: List audit log entries (requires audit:read)
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: entityType
+          in: query
+          schema: { type: string }
+        - name: entityId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: actorType
+          in: query
+          schema: { type: string, enum: [user, ai_agent, system] }
+      responses:
+        "200":
+          description: Paginated audit log
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditLogEntry" }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  total: { type: integer }

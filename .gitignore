@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Secrets + local config — .env carries the Neon DATABASE_URL, JWT secrets,
+# and DB credentials. Never commit these.
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Logs + temp
+*.log
+*.pid
+npm-debug.log*

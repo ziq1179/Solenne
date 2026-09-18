@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meridian — HRMS Design Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16213D;
+    --ink-soft:#2B3A5C;
+    --paper:#FAFAF8;
+    --paper-dim:#F1F1EE;
+    --graphite:#3A3D42;
+    --graphite-soft:#6B6E73;
+    --line:#E1E1DC;
+
+    --brass:#B08D57;      --brass-tint:#F6EFE3;
+    --teal:#2F6F6B;       --teal-tint:#E9F2F1;
+    --wine:#7A3B46;       --wine-tint:#F6EAEC;
+    --forest:#2E5339;     --forest-tint:#EAF1EB;
+    --plum:#5B3C6F;       --plum-tint:#F1EAF4;
+    --cobalt:#3B5C8C;     --cobalt-tint:#EBF0F7;
+
+    --serif: 'Fraunces', Georgia, serif;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--paper); color:var(--graphite);
+    font-family:var(--sans); line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  img{max-width:100%;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 40px;}
+  @media (max-width:720px){ .wrap{padding:0 20px;} }
+
+  /* ---------- Top chrome ---------- */
+  .topbar{
+    background:var(--ink); color:#EDEFF4; padding:18px 0; position:sticky; top:0; z-index:50;
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .topbar .wrap{display:flex; align-items:center; justify-content:space-between;}
+  .brand{font-family:var(--serif); font-size:20px; font-weight:500; letter-spacing:.2px; display:flex; align-items:center; gap:10px;}
+  .brand .mark{width:22px;height:22px;border:1.5px solid #C9CEDC;border-radius:50%;position:relative; flex-shrink:0;}
+  .brand .mark::after{content:"";position:absolute;inset:5px;background:#C9CEDC;border-radius:1px;transform:rotate(45deg);}
+  .navlinks{display:flex; gap:28px; font-size:14px; color:#B8BECF;}
+  .navlinks a{color:inherit; text-decoration:none;}
+  @media (max-width:720px){ .navlinks{display:none;} }
+
+  /* ---------- Intro ---------- */
+  .intro{padding:88px 0 64px; border-bottom:1px solid var(--line);}
+  .intro .kicker{font-size:13px; color:var(--graphite-soft); margin-bottom:18px;}
+  .intro h1{
+    font-family:var(--serif); font-weight:500; font-size:clamp(34px,4.6vw,54px);
+    line-height:1.12; letter-spacing:-.01em; color:var(--ink); max-width:820px; margin:0 0 22px;
+  }
+  .intro p{font-size:17px; color:var(--graphite-soft); max-width:600px; margin:0;}
+
+  .tokens{display:grid; grid-template-columns:repeat(6,1fr); gap:0; margin-top:56px; border-top:1px solid var(--line);}
+  @media (max-width:900px){ .tokens{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:520px){ .tokens{grid-template-columns:repeat(2,1fr);} }
+  .token{padding:20px 18px 0; border-right:1px solid var(--line);}
+  .token:last-child{border-right:none;}
+  .swatch{width:100%; height:44px; border-radius:3px; margin-bottom:10px;}
+  .token .name{font-size:12.5px; font-weight:600; color:var(--ink);}
+  .token .use{font-size:11.5px; color:var(--graphite-soft); margin-top:2px;}
+
+  /* ---------- Module section shell ---------- */
+  .module{padding:96px 0; border-bottom:1px solid var(--line);}
+  .module:last-of-type{border-bottom:none;}
+  .module-head{display:flex; gap:44px; align-items:flex-start; margin-bottom:44px; flex-wrap:wrap;}
+  .module-num{
+    font-family:var(--serif); font-size:15px; color:var(--m-accent); font-weight:500;
+    border:1px solid var(--m-accent); border-radius:50%; width:40px; height:40px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .module-copy{max-width:560px; flex:1; min-width:260px;}
+  .module-copy .stage{font-size:12.5px; color:var(--m-accent); font-weight:600; margin-bottom:8px;}
+  .module-copy h2{font-family:var(--serif); font-weight:500; font-size:30px; color:var(--ink); margin:0 0 12px; letter-spacing:-.005em;}
+  .module-copy p{font-size:15px; color:var(--graphite-soft); margin:0;}
+  .rationale{
+    max-width:300px; font-size:13.5px; color:var(--graphite-soft); border-left:2px solid var(--m-accent);
+    padding-left:16px; margin-left:auto; font-style:italic;
+  }
+  @media (max-width:800px){ .rationale{margin-left:0; border-left:none; border-top:2px solid var(--m-accent); padding-left:0; padding-top:10px;} }
+
+  /* screen frame */
+  .frame{
+    border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff;
+    box-shadow:0 18px 40px -24px rgba(22,33,61,.28);
+  }
+  .frame-bar{
+    display:flex; align-items:center; gap:8px; padding:11px 16px; background:var(--paper-dim);
+    border-bottom:1px solid var(--line);
+  }
+  .frame-bar .dot{width:8px;height:8px;border-radius:50%; background:#D8D8D2;}
+  .frame-bar .path{font-size:11.5px; color:var(--graphite-soft); margin-left:8px;}
+  .screen{padding:32px; background:#fff;}
+
+  /* ============ MODULE 1 — CORE HR (directory / profile) ============ */
+  .hr-layout{display:grid; grid-template-columns:230px 1fr; gap:28px;}
+  @media (max-width:700px){ .hr-layout{grid-template-columns:1fr;} }
+  .hr-list{border-right:1px solid var(--line); padding-right:24px;}
+  .hr-search{font-size:13px; color:var(--graphite-soft); border:1px solid var(--line); border-radius:5px; padding:8px 12px; margin-bottom:16px;}
+  .hr-person{display:flex; align-items:center; gap:10px; padding:9px 6px; border-radius:5px; font-size:13.5px;}
+  .hr-person.active{background:var(--brass-tint);}
+  .hr-avatar{width:28px;height:28px;border-radius:50%; background:linear-gradient(135deg,var(--brass),#8E703F); flex-shrink:0;}
+  .hr-person .meta{color:var(--graphite-soft); font-size:11.5px;}
+  .hr-profile-top{display:flex; gap:18px; align-items:center; margin-bottom:28px;}
+  .hr-avatar-lg{width:64px;height:64px;border-radius:50%; background:linear-gradient(135deg,var(--brass),#8E703F);}
+  .hr-profile-top h3{font-family:var(--serif); font-size:22px; margin:0 0 3px; color:var(--ink); font-weight:500;}
+  .hr-profile-top .role{font-size:13.5px; color:var(--graphite-soft);}
+  .hr-tag{display:inline-block; font-size:11px; padding:3px 9px; border-radius:20px; background:var(--brass-tint); color:var(--brass); margin-top:6px;}
+  .hr-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden;}
+  .hr-cell{background:#fff; padding:16px;}
+  .hr-cell .label{font-size:11px; color:var(--graphite-soft); margin-bottom:5px;}
+  .hr-cell .val{font-size:14.5px; color:var(--ink); font-weight:600;}
+  .hr-timeline{margin-top:24px;}
+  .hr-timeline .item{display:flex; gap:12px; font-size:13px; padding:9px 0; border-top:1px solid var(--line);}
+  .hr-timeline .item .date{color:var(--graphite-soft); width:70px; flex-shrink:0;}
+
+  /* ============ MODULE 2 — RECRUITMENT (kanban) ============ */
+  .kanban{display:grid; grid-template-columns:repeat(4,1fr); gap:16px;}
+  @media (max-width:800px){ .kanban{grid-template-columns:1fr 1fr;} }
+  .kcol .khead{font-size:12px; font-weight:600; color:var(--teal); margin-bottom:12px; display:flex; justify-content:space-between;}
+  .kcard{background:var(--teal-tint); border:1px solid #D7E7E5; border-radius:6px; padding:12px; margin-bottom:10px;}
+  .kcard .name{font-size:13.5px; font-weight:600; color:var(--ink); margin-bottom:4px;}
+  .kcard .role{font-size:11.5px; color:var(--graphite-soft); margin-bottom:8px;}
+  .kcard .foot{display:flex; justify-content:space-between; align-items:center;}
+  .kchip{font-size:10px; background:#fff; border:1px solid #C9DEDB; color:var(--teal); padding:2px 7px; border-radius:20px;}
+  .kavatar{width:20px;height:20px;border-radius:50%; background:linear-gradient(135deg,var(--teal),#1D4B48);}
+
+  /* ============ MODULE 3 — LEAVE & ATTENDANCE (calendar) ============ */
+  .leave-layout{display:grid; grid-template-columns:1.3fr 1fr; gap:32px;}
+  @media (max-width:750px){ .leave-layout{grid-template-columns:1fr;} }
+  .cal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;}
+  .cal-head h4{font-family:var(--serif); font-size:17px; color:var(--ink); margin:0; font-weight:500;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px;}
+  .cal-dow{font-size:10px; text-align:center; color:var(--graphite-soft); padding-bottom:4px;}
+  .cal-day{aspect-ratio:1; border-radius:5px; background:var(--paper-dim); display:flex; align-items:center; justify-content:center; font-size:11.5px; color:var(--graphite-soft); position:relative;}
+  .cal-day.leave{background:var(--wine-tint); color:var(--wine); font-weight:600;}
+  .cal-day.today{outline:1.5px solid var(--wine); color:var(--ink); font-weight:600;}
+  .balance-card{background:var(--wine-tint); border-radius:8px; padding:20px; margin-bottom:14px;}
+  .balance-card .big{font-family:var(--serif); font-size:32px; color:var(--wine); font-weight:500;}
+  .balance-card .lbl{font-size:12.5px; color:var(--graphite-soft); margin-top:2px;}
+  .bar-row{display:flex; align-items:center; gap:10px; font-size:12.5px; margin-bottom:10px;}
+  .bar-row .name{width:90px; color:var(--graphite-soft); flex-shrink:0;}
+  .bar-track{flex:1; height:6px; background:var(--paper-dim); border-radius:4px; overflow:hidden;}
+  .bar-fill{height:100%; background:var(--wine); border-radius:4px;}
+
+  /* ============ MODULE 4 — PAYROLL (statement) ============ */
+  .pay-hero{display:flex; justify-content:space-between; align-items:flex-end; padding-bottom:24px; border-bottom:1px solid var(--line); margin-bottom:24px;}
+  .pay-hero .big{font-family:var(--serif); font-size:44px; color:var(--forest); font-weight:500;}
+  .pay-hero .lbl{font-size:12.5px; color:var(--graphite-soft); margin-bottom:6px;}
+  .pay-status{font-size:11px; background:var(--forest-tint); color:var(--forest); padding:4px 11px; border-radius:20px; font-weight:600;}
+  .pay-row{display:flex; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--line); font-size:13.5px;}
+  .pay-row .k{color:var(--graphite-soft);}
+  .pay-row .v{color:var(--ink); font-weight:500;}
+  .pay-row.total .k, .pay-row.total .v{color:var(--forest); font-weight:700;}
+
+  /* ============ MODULE 5 — PERFORMANCE (goals / rings) ============ */
+  .perf-layout{display:grid; grid-template-columns:200px 1fr; gap:36px; align-items:center;}
+  @media (max-width:700px){ .perf-layout{grid-template-columns:1fr; justify-items:center;} }
+  .ring{
+    width:180px; height:180px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:conic-gradient(var(--plum) 0deg 259deg, var(--paper-dim) 259deg 360deg);
+  }
+  .ring-inner{width:140px; height:140px; border-radius:50%; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .ring-inner .num{font-family:var(--serif); font-size:30px; color:var(--plum); font-weight:500;}
+  .ring-inner .lbl{font-size:11px; color:var(--graphite-soft);}
+  .goal-row{display:flex; align-items:center; gap:14px; padding:13px 0; border-bottom:1px solid var(--line);}
+  .goal-row .txt{flex:1;}
+  .goal-row .txt .t{font-size:13.5px; color:var(--ink); font-weight:500;}
+  .goal-row .txt .s{font-size:11.5px; color:var(--graphite-soft);}
+  .goal-pct{font-size:13px; font-weight:600; color:var(--plum); width:40px; text-align:right;}
+
+  /* ============ MODULE 6 — SELF-SERVICE (dashboard) ============ */
+  .ess-hello{font-family:var(--serif); font-size:22px; color:var(--ink); font-weight:500; margin-bottom:4px;}
+  .ess-sub{font-size:13.5px; color:var(--graphite-soft); margin-bottom:26px;}
+  .ess-actions{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:28px;}
+  @media (max-width:650px){ .ess-actions{grid-template-columns:1fr 1fr;} }
+  .ess-tile{background:var(--cobalt-tint); border-radius:8px; padding:16px; font-size:12.5px; color:var(--cobalt); font-weight:600;}
+  .ess-tile .ic{width:26px; height:26px; border-radius:6px; background:var(--cobalt); margin-bottom:10px;}
+  .ess-widgets{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .ess-widget{border:1px solid var(--line); border-radius:8px; padding:16px;}
+  .ess-widget .h{font-size:12px; color:var(--graphite-soft); margin-bottom:10px;}
+  .ess-mini-row{display:flex; justify-content:space-between; font-size:13px; padding:6px 0;}
+
+  /* ---------- Footer ---------- */
+  footer{padding:64px 0 80px; text-align:center;}
+  footer p{font-size:12.5px; color:var(--graphite-soft); margin:0;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="mark"></span>Meridian HR</div>
+    <div class="navlinks"><a href="#hr">Core HR</a><a href="#recruit">Recruitment</a><a href="#leave">Leave</a><a href="#payroll">Payroll</a><a href="#perf">Performance</a><a href="#ess">Self-Service</a></div>
+  </div>
+</div>
+
+<section class="intro">
+  <div class="wrap">
+    <div class="kicker">Design concept — HRMS product suite</div>
+    <h1>One quiet corporate language, six distinct rooms.</h1>
+    <p>Every module shares the same ink, type, and structure — so the product never feels stitched together — but each one is tuned with its own accent and layout logic to match how that work actually gets done.</p>
+
+    <div class="tokens">
+      <div class="token"><div class="swatch" style="background:var(--ink)"></div><div class="name">Ink #16213D</div><div class="use">Chrome, nav, headings</div></div>
+      <div class="token"><div class="swatch" style="background:var(--brass)"></div><div class="name">Brass #B08D57</div><div class="use">Core HR</div></div>
+      <div class="token"><div class="swatch" style="background:var(--teal)"></div><div class="name">Teal #2F6F6B</div><div class="use">Recruitment</div></div>
+      <div class="token"><div class="swatch" style="background:var(--wine)"></div><div class="name">Wine #7A3B46</div><div class="use">Leave &amp; Attendance</div></div>
+      <div class="token"><div class="swatch" style="background:var(--forest)"></div><div class="name">Forest #2E5339</div><div class="use">Payroll</div></div>
+      <div class="token"><div class="swatch" style="background:var(--plum)"></div><div class="name">Plum #5B3C6F</div><div class="use">Performance</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MODULE 1: CORE HR -->
+<section class="module" id="hr" style="--m-accent:var(--brass)">
+  <div class="wrap">
+    <div class="module-head">
+      <div class="module-num">01</div>
+      <div class="module-copy">
+        <div class="stage">Hire → the record of the person</div>
+        <h2>Core HR</h2>
+        <p>A directory-first layout: a calm list on the left, an editorial profile on the right. Brass reads as archival and dependable — the register the rest of the system points back to.</p>
+      </div>
+      <div class="rationale">List + profile, not a card grid — this is where you look someone up, not browse.</div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="path">meridianhr.com/people/aisha-khan</div></div>
+      <div class="screen">
+        <div class="hr-layout">
+          <div class="hr-list">
+            <div class="hr-search">Search people…</div>
+            <div class="hr-person active"><div class="hr-avatar"></div><div><div>Aisha Khan</div><div class="meta">Design · Lahore</div></div></div>
+            <div class="hr-person"><div class="hr-avatar"></div><div><div>Marcus Webb</div><div class="meta">Finance · London</div></div></div>
+            <div class="hr-person"><div class="hr-avatar"></div><div><div>Sofia Rinaldi</div><div class="meta">Sales · Milan</div></div></div>
+            <div class="hr-person"><div class="hr-avatar"></div><div><div>Kenji Watanabe</div><div class="meta">Eng · Tokyo</div></div></div>
+          </div>
+          <div>
+            <div class="hr-profile-top">
+              <div class="hr-avatar-lg"></div>
+              <div>
+                <h3>Aisha Khan</h3>
+                <div class="role">Senior Product Designer, Design</div>
+                <span class="hr-tag">Active — 2y 4m tenure</span>
+              </div>
+            </div>
+            <div class="hr-grid">
+              <div class="hr-cell"><div class="label">Manager</div><div class="val">Priya Menon</div></div>
+              <div class="hr-cell"><div class="label">Location</div><div class="val">Lahore, PK</div></div>
+              <div class="hr-cell"><div class="label">Employment</div><div class="val">Full-time</div></div>
+            </div>
+            <div class="hr-timeline">
+              <div class="item"><div class="date">Mar 2025</div><div>Promoted to Senior Product Designer</div></div>
+              <div class="item"><div class="date">Jun 2023</div><div>Transferred to Design from Research</div></div>
+              <div class="item"><div class="date">Jan 2023</div><div>Joined Meridian as Product Designer</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MODULE 2: RECRUITMENT -->
+<section class="module" id="recruit" style="--m-accent:var(--teal)">
+  <div class="wrap">
+    <div class="module-head">
+      <div class="module-num">02</div>
+      <div class="module-copy">
+        <div class="stage">Before hire → finding the person</div>
+        <h2>Recruitment</h2>
+        <p>A pipeline is motion, so the layout is a kanban board rather than a list. Teal is cooler and more active than the archival brass of Core HR — this is a workspace, not a record.</p>
+      </div>
+      <div class="rationale">Columns as stages, not statuses — the board mirrors the actual hiring funnel.</div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="path">meridianhr.com/hiring/senior-backend-engineer</div></div>
+      <div class="screen">
+        <div class="kanban">
+          <div class="kcol">
+            <div class="khead">Applied <span>18</span></div>
+            <div class="kcard"><div class="name">Daniel Osei</div><div class="role">8y backend · Remote</div><div class="foot"><span class="kchip">New</span><div class="kavatar"></div></div></div>
+            <div class="kcard"><div class="name">Wei Lin</div><div class="role">5y backend · Singapore</div><div class="foot"><span class="kchip">New</span><div class="kavatar"></div></div></div>
+          </div>
+          <div class="kcol">
+            <div class="khead">Screening <span>7</span></div>
+            <div class="kcard"><div class="name">Ravi Patel</div><div class="role">Call — Fri 3pm</div><div class="foot"><span class="kchip">Scheduled</span><div class="kavatar"></div></div></div>
+          </div>
+          <div class="kcol">
+            <div class="khead">Interview <span>4</span></div>
+            <div class="kcard"><div class="name">Elena Petrova</div><div class="role">Panel round 2/3</div><div class="foot"><span class="kchip">In progress</span><div class="kavatar"></div></div></div>
+            <div class="kcard"><div class="name">Tom Bakker</div><div class="role">Awaiting scorecards</div><div class="foot"><span class="kchip">In progress</span><div class="kavatar"></div></div></div>
+          </div>
+          <div class="kcol">
+            <div class="khead">Offer <span>1</span></div>
+            <div class="kcard"><div class="name">Grace Odhiambo</div><div class="role">Sent — expires in 4d</div><div class="foot"><span class="kchip">Pending</span><div class="kavatar"></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MODULE 3: LEAVE & ATTENDANCE -->
+<section class="module" id="leave" style="--m-accent:var(--wine)">
+  <div class="wrap">
+    <div class="module-head">
+      <div class="module-num">03</div>
+      <div class="module-copy">
+        <div class="stage">During employment → time away and time worked</div>
+        <h2>Leave &amp; Attendance</h2>
+        <p>Time is inherently a calendar, so the mockup leads with one. Wine gives the module warmth without reading as an alert color — leave requests are routine, not urgent.</p>
+      </div>
+      <div class="rationale">Balances live beside the calendar, not buried in a separate tab.</div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="path">meridianhr.com/time/my-calendar</div></div>
+      <div class="screen">
+        <div class="leave-layout">
+          <div>
+            <div class="cal-head"><h4>September 2026</h4><div style="font-size:12px;color:var(--graphite-soft)">Team view</div></div>
+            <div class="cal-grid">
+              <div class="cal-dow">S</div><div class="cal-dow">M</div><div class="cal-dow">T</div><div class="cal-dow">W</div><div class="cal-dow">T</div><div class="cal-dow">F</div><div class="cal-dow">S</div>
+              <div class="cal-day"></div><div class="cal-day">1</div><div class="cal-day">2</div><div class="cal-day">3</div><div class="cal-day">4</div><div class="cal-day">5</div><div class="cal-day">6</div>
+              <div class="cal-day">7</div><div class="cal-day">8</div><div class="cal-day">9</div><div class="cal-day">10</div><div class="cal-day">11</div><div class="cal-day">12</div><div class="cal-day">13</div>
+              <div class="cal-day">14</div><div class="cal-day">15</div><div class="cal-day leave">16</div><div class="cal-day leave">17</div><div class="cal-day">18</div><div class="cal-day today">19</div><div class="cal-day">20</div>
+            </div>
+          </div>
+          <div>
+            <div class="balance-card"><div class="big">14.5</div><div class="lbl">Annual leave days remaining</div></div>
+            <div class="bar-row"><div class="name">Annual</div><div class="bar-track"><div class="bar-fill" style="width:72%"></div></div></div>
+            <div class="bar-row"><div class="name">Sick</div><div class="bar-track"><div class="bar-fill" style="width:30%"></div></div></div>
+            <div class="bar-row"><div class="name">Personal</div><div class="bar-track"><div class="bar-fill" style="width:50%"></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MODULE 4: PAYROLL -->
+<section class="module" id="payroll" style="--m-accent:var(--forest)">
+  <div class="wrap">
+    <div class="module-head">
+      <div class="module-num">04</div>
+      <div class="module-copy">
+        <div class="stage">Every cycle → what people are actually paid</div>
+        <h2>Payroll</h2>
+        <p>Styled like a statement, not a dashboard — a single hero figure, then a clean ledger. Forest green is the most literal accent in the suite, deliberately, because payroll rewards clarity over cleverness.</p>
+      </div>
+      <div class="rationale">One number matters most here. Everything else is in service of it.</div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="path">meridianhr.com/pay/august-2026</div></div>
+      <div class="screen" style="max-width:520px;">
+        <div class="pay-hero">
+          <div><div class="lbl">Net pay — August 2026</div><div class="big">$6,214.80</div></div>
+          <div class="pay-status">Paid Aug 31</div>
+        </div>
+        <div class="pay-row"><div class="k">Base salary</div><div class="v">$7,200.00</div></div>
+        <div class="pay-row"><div class="k">Overtime</div><div class="v">$180.00</div></div>
+        <div class="pay-row"><div class="k">Tax &amp; statutory deductions</div><div class="v">−$1,050.20</div></div>
+        <div class="pay-row"><div class="k">Benefits contribution</div><div class="v">−$115.00</div></div>
+        <div class="pay-row total"><div class="k">Net pay</div><div class="v">$6,214.80</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MODULE 5: PERFORMANCE -->
+<section class="module" id="perf" style="--m-accent:var(--plum)">
+  <div class="wrap">
+    <div class="module-head">
+      <div class="module-num">05</div>
+      <div class="module-copy">
+        <div class="stage">Ongoing → growth and contribution</div>
+        <h2>Performance</h2>
+        <p>The only module built around a radial form — goals are partial and cumulative, which a progress ring shows more honestly than a bar. Plum is reflective rather than clinical, fitting a conversation about growth.</p>
+      </div>
+      <div class="rationale">Ring for the whole; a short list for the parts that make it up.</div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="path">meridianhr.com/growth/q3-review</div></div>
+      <div class="screen">
+        <div class="perf-layout">
+          <div class="ring"><div class="ring-inner"><div class="num">72%</div><div class="lbl">Q3 goals</div></div></div>
+          <div>
+            <div class="goal-row"><div class="txt"><div class="t">Ship the onboarding redesign</div><div class="s">Design · Due Sep 30</div></div><div class="goal-pct">90%</div></div>
+            <div class="goal-row"><div class="txt"><div class="t">Mentor two junior designers</div><div class="s">Growth · Ongoing</div></div><div class="goal-pct">60%</div></div>
+            <div class="goal-row"><div class="txt"><div class="t">Reduce support handoff time</div><div class="s">Cross-team · Due Oct 15</div></div><div class="goal-pct">45%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MODULE 6: SELF-SERVICE -->
+<section class="module" id="ess" style="--m-accent:var(--cobalt)">
+  <div class="wrap">
+    <div class="module-head">
+      <div class="module-num">06</div>
+      <div class="module-copy">
+        <div class="stage">Every day → the employee's own front door</div>
+        <h2>Employee Self-Service</h2>
+        <p>The friendliest room in the suite — bigger tap targets, plainer language, quick actions above everything else. Cobalt is close to the corporate ink but lighter, so it still feels like the same company, just a calmer room in it.</p>
+      </div>
+      <div class="rationale">Actions before information — most visits here are three taps, not a read.</div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="path">meridianhr.com/home</div></div>
+      <div class="screen">
+        <div class="ess-hello">Good morning, Aisha</div>
+        <div class="ess-sub">You have 1 pending approval and no leave scheduled this week.</div>
+        <div class="ess-actions">
+          <div class="ess-tile"><div class="ic"></div>Request leave</div>
+          <div class="ess-tile"><div class="ic"></div>View payslip</div>
+          <div class="ess-tile"><div class="ic"></div>Update details</div>
+          <div class="ess-tile"><div class="ic"></div>Ask HR</div>
+        </div>
+        <div class="ess-widgets">
+          <div class="ess-widget">
+            <div class="h">Upcoming</div>
+            <div class="ess-mini-row"><span>1:1 with Priya</span><span>Today, 3pm</span></div>
+            <div class="ess-mini-row"><span>Benefits enrollment closes</span><span>Sep 30</span></div>
+          </div>
+          <div class="ess-widget">
+            <div class="h">Your team, out this week</div>
+            <div class="ess-mini-row"><span>Marcus Webb</span><span>Mon–Tue</span></div>
+            <div class="ess-mini-row"><span>Sofia Rinaldi</span><span>Thu</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap"><p>Meridian HR — design concept for internal review</p></div>
+</footer>
+
+</body>
+</html>
