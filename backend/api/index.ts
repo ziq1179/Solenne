@@ -8,7 +8,7 @@ loadEnvFile()
 const config = loadConfig()
 
 let cached: {
-  app: InstanceType<typeof Fastify>
+  app: FastifyInstance
   db: Db
 } | null = null
 
@@ -16,13 +16,16 @@ export default async function handler(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
+  if (!config.databaseUrl) {
+    throw new Error('DATABASE_URL is required to boot the Fastify lambda')
+  }
   if (!cached) {
     const db = await Db.open({
       connectionString: config.databaseUrl,
       max: config.dbPoolSize,
       ssl: config.dbSsl,
     })
-    const app: InstanceType<typeof Fastify> = await buildApp({
+    const app: FastifyInstance = await buildApp({
       db,
       config,
       logger: false,
