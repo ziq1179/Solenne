@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend-e2e:
+    name: typecheck + Neon e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: backend
+        run: pnpm typecheck
+
+      # Each run gets a fresh, isolated Neon branch (branched off primary).
+      # A brand-new branch has NO idempotency state, so the suite's fixed
+      # idempotency keys can never replay a cached response from an earlier
+      # run — the exact class of flake that hit the demo DB before the
+      # resetDemoLeaveState idempotency wipe. CI can never go stale.
+      - name: Create isolated Neon branch
+        id: neon
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: ci-${{ github.ref_name }}-${{ github.run_id }}
+
+      - name: Write DATABASE_URL (pooled, sslmode=require)
+        shell: bash
+        working-directory: backend
+        env:
+          NEON_DB_URL: ${{ steps.neon.outputs.db_url }}
+        run: |
+          printf 'DATABASE_URL=%s\n' "$NEON_DB_URL" > .env
+
+      # Self-seeding: Db.open applies schema + RLS hardening, seedDatabase
+      # seeds the demo tenants, and resetDemoLeaveState starts from clean
+      # leave + idempotency numbers. 13 tests, no Neon cold-start race because
+      # the branch is brand new.
+      - name: Run e2e suite
+        working-directory: backend
+        run: pnpm test
