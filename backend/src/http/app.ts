@@ -24,6 +24,19 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await fastify.register(jwt, { secret: opts.config.jwtSecret })
 
   registerErrorHandler(fastify)
+
+  fastify.get('/', async () => ({
+    name: 'Solenne',
+    description: 'Trellis HR API',
+    status: 'ok',
+    version: '1.0.0',
+  }))
+  fastify.get('/health', async () => ({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  }))
+
   registerAuthRoutes(fastify)
   registerEmployeeRoutes(fastify)
   registerLeaveRoutes(fastify)
