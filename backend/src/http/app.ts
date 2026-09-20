@@ -8,6 +8,61 @@ import { registerAuthRoutes } from '../modules/auth/auth.routes.js'
 import { registerEmployeeRoutes } from '../modules/employees/employees.routes.js'
 import { registerLeaveRoutes } from '../modules/leave/leave.routes.js'
 
+function landingPage(): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Solenne — Trellis HR API</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        background: linear-gradient(160deg, #0f172a, #1e293b);
+        color: #e2e8f0;
+      }
+      main { text-align: center; padding: 2rem; max-width: 560px; }
+      h1 { font-size: 2.5rem; margin: 0 0 .5rem; letter-spacing: -.02em; }
+      h1 span { color: #38bdf8; }
+      p.lead { color: #94a3b8; margin: 0 0 2rem; font-size: 1.05rem; }
+      .status {
+        display: inline-block; padding: .4rem .9rem; border-radius: 999px;
+        background: rgba(34,197,94,.15); color: #4ade80;
+        border: 1px solid rgba(34,197,94,.35); font-size: .85rem; font-weight: 600;
+        margin-bottom: 2rem;
+      }
+      ul { list-style: none; padding: 0; margin: 0 0 2rem; font-size: .95rem; }
+      li { margin: .5rem 0; }
+      a {
+        color: #38bdf8; text-decoration: none; border-bottom: 1px solid transparent;
+      }
+      a:hover { border-bottom-color: #38bdf8; }
+      code {
+        background: rgba(148,163,184,.15); padding: .1rem .4rem;
+        border-radius: 4px; font-size: .85em;
+      }
+      footer { color: #64748b; font-size: .8rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Solenne <span>—</span> Trellis HR API</h1>
+      <p class="lead">The backend for the Trellis HRMS SaaS platform. Tenancy, auth/IAM, core HR, leave, attendance and audit — with per-tenant Row-Level-Security.</p>
+      <div class="status">● API online</div>
+      <ul>
+        <li><a href="/health">/health</a> — <code>liveness probe</code></li>
+        <li><a href="/auth/login">POST /auth/login</a> — <code>get a JWT</code></li>
+        <li><a href="/auth/refresh">POST /auth/refresh</a> — <code>rotate tokens</code></li>
+        <li><a href="/auth/me">GET /auth/me</a> — <code>current user (Bearer token)</code></li>
+      </ul>
+      <footer>Solenne v1.0.0 — Fastify &middot; PostgreSQL &middot; Neon</footer>
+    </main>
+  </body>
+</html>`
+}
+
 export interface BuildAppOptions {
   db: Db
   config: Config
@@ -25,12 +80,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
 
   registerErrorHandler(fastify)
 
-  fastify.get('/', async () => ({
-    name: 'Solenne',
-    description: 'Trellis HR API',
-    status: 'ok',
-    version: '1.0.0',
-  }))
+  fastify.get('/', async (_req, reply) =>
+    reply.type('text/html; charset=utf-8').send(landingPage()),
+  )
   fastify.get('/health', async () => ({
     status: 'ok',
     uptime: process.uptime(),
