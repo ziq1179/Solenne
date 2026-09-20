@@ -14,6 +14,19 @@ export interface TokenPair {
   expiresIn: number
 }
 
+export interface SignupInput {
+  companyName: string
+  subdomain: string
+  adminEmail: string
+  adminPassword: string
+  adminFirstName: string
+  adminLastName: string
+}
+
+export interface SignupResult extends TokenPair {
+  tenant: { id: string; name: string; subdomain: string; plan: string }
+}
+
 export interface LeaveType {
   id: string
   name: string
@@ -200,6 +213,9 @@ async function request<T>(
 export const api = {
   login: (body: { email: string; password: string; tenantSubdomain: string }) =>
     request<TokenPair>('/auth/login', { method: 'POST', body: JSON.stringify(body) }, false, false),
+
+  signup: (body: SignupInput) =>
+    request<SignupResult>('/tenants/signup', { method: 'POST', body: JSON.stringify(body) }, false, false),
 
   me: () => request<Me>('/auth/me', { method: 'GET' }, true, true),
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { CalendarClock } from 'lucide-react'
 import { Alert, Button, Input, Label } from '@/components/ui'
 import { useAuth } from '@/components/auth'
@@ -84,6 +85,12 @@ export default function LoginPage() {
           </Button>
         </form>
         <p className="mt-6 text-center text-xs text-slate-500">
+          New here?{' '}
+          <Link href="/signup" className="text-sky-400 hover:underline">
+            Create a workspace
+          </Link>
+        </p>
+        <p className="mt-2 text-center text-xs text-slate-500">
           Demo: <code className="text-slate-400">acme</code> / <code className="text-slate-400">aisha@acme.com</code> /{' '}
           <code className="text-slate-400">employee123</code>
         </p>

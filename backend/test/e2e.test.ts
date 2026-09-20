@@ -522,3 +522,106 @@ describe('reports', () => {
     expect(globex.json().map((r: { employeeId: string }) => r.employeeId)).toEqual([SEED.EMP_GLOBEX])
   })
 })
+
+describe('tenant self-service signup', () => {
+  // Timestamp-baked so the suite can be re-run safely; a fixed subdomain would
+  // 409 on the second run.
+  const subdomain = `t${Date.now().toString(36)}`
+  const email = `admin@${subdomain}.com`
+  const password = 'password123'
+  let signup: { accessToken: string; refreshToken: string; expiresIn: number }
+
+  it('provisions a tenant, seeds defaults, and auto-logs-in the admin', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/tenants/signup',
+      payload: {
+        companyName: 'Test Company',
+        subdomain,
+        adminEmail: email,
+        adminPassword: password,
+        adminFirstName: 'Test',
+        adminLastName: 'Admin',
+      },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = res.json()
+    expect(body.accessToken).toBeTruthy()
+    expect(body.refreshToken).toBeTruthy()
+    expect(body.expiresIn).toBeGreaterThan(0)
+    expect(body.tenant).toMatchObject({ subdomain, plan: 'trial' })
+    signup = body
+
+    // The freshly-minted JWT carries seeded admin claims.
+    const me = await app.inject({ method: 'GET', url: '/auth/me', headers: auth(body.accessToken) })
+    expect(me.statusCode).toBe(200)
+    const meBody = me.json()
+    expect(meBody.roles).toEqual(expect.arrayContaining(['admin', 'employee']))
+    expect(meBody.permissions).toContain('employee:write')
+  })
+
+  it('seeds the admin employee and standard leave types; the same credentials log in', async () => {
+    const employees = await app.inject({
+      method: 'GET',
+      url: '/employees',
+      headers: auth(signup.accessToken),
+    })
+    expect(employees.statusCode).toBe(200)
+    const list = employees.json()
+    expect(list.total).toBe(1)
+    expect(list.data[0].jobTitle).toBe('Administrator')
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email, password, tenantSubdomain: subdomain },
+    })
+    expect(login.statusCode).toBe(200)
+  })
+
+  it('rejects a taken subdomain with 409', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/tenants/signup',
+      payload: {
+        companyName: 'Duplicate',
+        subdomain,
+        adminEmail: 'dup@example.com',
+        adminPassword: password,
+        adminFirstName: 'Dup',
+        adminLastName: 'User',
+      },
+    })
+    expect(res.statusCode).toBe(409)
+  })
+
+  it('rejects invalid payloads with 400', async () => {
+    const badSub = await app.inject({
+      method: 'POST',
+      url: '/tenants/signup',
+      payload: {
+        companyName: 'X',
+        subdomain: 'Not Valid!',
+        adminEmail: email,
+        adminPassword: password,
+        adminFirstName: 'A',
+        adminLastName: 'B',
+      },
+    })
+    expect(badSub.statusCode).toBe(400)
+
+    const weakPassword = await app.inject({
+      method: 'POST',
+      url: '/tenants/signup',
+      payload: {
+        companyName: 'X',
+        subdomain: 'another-placeholder-sub',
+        adminEmail: 'weak@example.com',
+        adminPassword: 'short',
+        adminFirstName: 'A',
+        adminLastName: 'B',
+      },
+    })
+    expect(weakPassword.statusCode).toBe(400)
+  })
+})

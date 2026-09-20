@@ -9,12 +9,13 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { api, clearTokens, getAccessToken, setTokens, type Me } from '@/lib/api'
+import { api, clearTokens, getAccessToken, setTokens, type Me, type SignupInput } from '@/lib/api'
 
 interface AuthValue {
   me: Me | null
   loading: boolean
   login: (email: string, password: string, tenantSubdomain: string) => Promise<Me>
+  signup: (body: SignupInput) => Promise<Me>
   logout: () => void
   refreshMe: () => Promise<void>
 }
@@ -76,14 +77,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const signup = useCallback(async (body: SignupInput) => {
+    const result = await api.signup(body)
+    setTokens(result)
+    const m = await api.me()
+    setMe(m)
+    setLoading(false)
+    return m
+  }, [])
+
   const logout = useCallback(() => {
     clearTokens()
     setMe(null)
   }, [])
 
   const value = useMemo(
-    () => ({ me, loading, login, logout, refreshMe }),
-    [me, loading, login, logout, refreshMe],
+    () => ({ me, loading, login, signup, logout, refreshMe }),
+    [me, loading, login, signup, logout, refreshMe],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -243,6 +243,56 @@ components:
               remainingDays: { type: number }
 
 paths:
+  /tenants/signup:
+    post:
+      summary: Self-service tenant signup — provisions a tenant, seeds defaults, and auto-logs-in the admin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [companyName, subdomain, adminEmail, adminPassword, adminFirstName, adminLastName]
+              properties:
+                companyName: { type: string, maxLength: 160 }
+                subdomain:
+                  type: string
+                  pattern: "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+                  description: Globally unique tenant subdomain (lowercase, 3-63 chars)
+                adminEmail: { type: string, format: email }
+                adminPassword: { type: string, format: password, minLength: 8 }
+                adminFirstName: { type: string, maxLength: 120 }
+                adminLastName: { type: string, maxLength: 120 }
+      responses:
+        "201":
+          description: Tenant provisioned; admin automatically signed in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: integer }
+                  tenant:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      name: { type: string }
+                      subdomain: { type: string }
+                      plan: { type: string }
+        "400":
+          description: Invalid signup payload
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Subdomain already taken
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /auth/login:
     post:
       summary: Authenticate and receive an access + refresh token

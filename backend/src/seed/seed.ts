@@ -53,7 +53,9 @@ const GLOBEX_USERS: SeedUser[] = [
 
 const GMT = 'T00:00:00Z'
 
-async function seedPermissions(q: Q): Promise<Record<string, string>> {
+/** Global permissions catalog (ON CONFLICT code, idempotent). Exported for
+ *  tenant provisioning at signup time. */
+export async function seedPermissions(q: Q): Promise<Record<string, string>> {
   await q.exec(
     `INSERT INTO permissions (id, code)
      SELECT gen_random_uuid(), code FROM unnest($1::text[]) AS code
@@ -67,7 +69,7 @@ async function seedPermissions(q: Q): Promise<Record<string, string>> {
   return Object.fromEntries(res.rows.map((r) => [r.code, r.id]))
 }
 
-async function seedRolesForTenant(q: Q, tenantId: string, permissionIds: Record<string, string>): Promise<void> {
+export async function seedRolesForTenant(q: Q, tenantId: string, permissionIds: Record<string, string>): Promise<void> {
   for (const [roleName, def] of Object.entries(SYSTEM_ROLES)) {
     await q.exec(
       `INSERT INTO roles (id, tenant_id, name, is_system_role)
