@@ -44,6 +44,10 @@ export const TENANT_SCOPED_TABLES = [
   'attendance_records',
   'audit_logs',
   'idempotency_keys',
+  // Phase 2 — Recruitment / ATS. Added to the canonical list so the existing
+  // hardenRls pass (called from applyAtsSchema) picks them up idempotently.
+  'job_openings',
+  'job_candidates',
 ]
 
 /** Extra DDL appended after the canonical schema (extensions to the Phase 0/1 surface). */
@@ -76,6 +80,20 @@ export async function applyBaseSchema(exec: SqlExecutor): Promise<void> {
   await exec.exec(transformSchema(canonical))
   await exec.exec(EXTRA_DDL)
   await exec.exec(createRoleSql())
+}
+
+/**
+ * Phase 2 migrations, applied idempotently on every boot (existing environments
+ * skip applyBaseSchema because the base schema is already present). The DDL uses
+ * `IF NOT EXISTS`; the hardening pass that follows is itself idempotent
+ * (ownership transfer, policy (re)creation, FORCE RLS) and now covers the ATS
+ * tables via TENANT_SCOPED_TABLES.
+ */
+export async function applyAtsSchema(exec: SqlExecutor): Promise<void> {
+  const atsUrl = new URL('../../../phase2-ats.sql', import.meta.url)
+  const ats = await readFile(atsUrl, 'utf8')
+  await exec.exec(transformSchema(ats))
+  await hardenRls(exec)
 }
 
 function createRoleSql(): string {
@@ -117,6 +135,9 @@ export async function hardenRls(exec: SqlExecutor): Promise<void> {
        USING (tenant_id = current_setting('app.current_tenant', true)::uuid)
        WITH CHECK (tenant_id = current_setting('app.current_tenant', true)::uuid)`,
     )
+    // Creating a policy does not enable RLS; the base DDL does that for its own
+    // tables, but phase-2/EXTRA_DDL tables need it here (idempotent).
+    await exec.exec(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`)
     await exec.exec(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`)
     if (table === 'audit_logs') {
       // Keep the audit trail append-only even for its owner.

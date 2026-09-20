@@ -32,6 +32,13 @@ export const SEED = {
   LEAVE_SICK: '1aa00000-0000-4000-8000-000000000002',
   LEAVE_PERSONAL: '1aa00000-0000-4000-8000-000000000003',
   LEAVE_ANNUAL_GLOBEX: '1aa00000-0000-4000-8000-000000000004',
+
+  // Phase 2 — ATS demo data (Acme).
+  JOB_DESIGNER: '9b0a0000-0000-4000-8000-000000000001',
+  JOB_CSM: '9b0a0000-0000-4000-8000-000000000002',
+  CAND_LENA: '9c000000-0000-4000-8000-000000000001',
+  CAND_RYO: '9c000000-0000-4000-8000-000000000002',
+  CAND_OFFER: '9c000000-0000-4000-8000-000000000003',
 } as const
 
 interface SeedUser {
@@ -119,6 +126,53 @@ async function seedUsersAndRoles(q: Q, users: SeedUser[], tenantId: string): Pro
       )
     }
   }
+}
+
+async function seedAts(q: Q): Promise<void> {
+  // Jobs + a small candidate pipeline so the ATS surfaces have data out of the box.
+  await q.exec(
+    `INSERT INTO job_openings
+       (id, tenant_id, title, department_id, location_id, employment_type,
+        salary_min, salary_max, currency, description, status)
+     VALUES
+       ($1, $2, 'Senior Product Designer', $3, $4, 'full_time', 60000, 90000, 'USD',
+        'Own end-to-end product design across the Trellis platform.', 'open'),
+       ($5, $2, 'Customer Success Manager', $6, $7, 'full_time', 45000, 65000, 'USD',
+        'Nurture our growing SMB base into long-term customers.', 'open')
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      SEED.JOB_DESIGNER,
+      SEED.TENANT_ACME,
+      SEED.DEPT_DESIGN,
+      SEED.LOC_LHR,
+      SEED.JOB_CSM,
+      SEED.DEPT_FIN,
+      SEED.LOC_LDN,
+    ],
+  )
+  await q.exec(
+    `INSERT INTO job_candidates
+       (id, tenant_id, job_opening_id, first_name, last_name, email, phone, resume_text,
+        source, stage, rating, notes)
+     VALUES
+       ($1, $2, $3, 'Lena', 'Ortiz', 'lena.ortiz@example.com', '+1 555 0100',
+        '5 years designing B2B SaaS platforms; led design systems at two startups.',
+        'linkedin', 'applied', 4, 'Strong portfolio; follow-up with a take-home brief.'),
+       ($4, $2, $3, 'Ryo', 'Tanaka', 'ryo.tanaka@example.com', '+81 90 5555 0101',
+        'Product designer specialising in fintech web apps; fluent in Figma.',
+        'job_board', 'screening', 3, 'Screening call done; schedule portfolio review.'),
+       ($5, $2, $3, 'Mira', 'Okafor', 'mira.okafor@example.com', '+44 20 5555 0102',
+        'Design lead for an HR software suite; previously at a Series C company.',
+        'referral', 'offer', 5, 'Offered; awaiting acceptance.')
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      SEED.CAND_LENA,
+      SEED.TENANT_ACME,
+      SEED.JOB_DESIGNER,
+      SEED.CAND_RYO,
+      SEED.CAND_OFFER,
+    ],
+  )
 }
 
 async function seedAcme(q: Q): Promise<void> {
@@ -276,6 +330,7 @@ async function seedAll(db: Db): Promise<void> {
   await db.system(async (q) => {
     await seedAcme(q)
     await seedGlobex(q)
+    await seedAts(q)
   })
 }
 
@@ -285,6 +340,9 @@ async function seedAll(db: Db): Promise<void> {
  */
 export async function seedDatabase(db: Db): Promise<void> {
   await db.system(async (q) => {
+    // Phase 2 demo data is seeded before the Phase 0/1 fast path: an already
+    // populated database (e.g. production) still picks up the ATS sample jobs.
+    await seedAts(q)
     // Fast path: neon-pooler round trips are slow; skip once fully seeded.
     const existing = await q.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM employees WHERE tenant_id = ANY($1::uuid[])`,
@@ -294,6 +352,7 @@ export async function seedDatabase(db: Db): Promise<void> {
     if ((existing.rows[0]?.n ?? 0) >= 5) return
     await seedAcme(q)
     await seedGlobex(q)
+    await seedAts(q)
   })
 }
 
@@ -348,8 +407,18 @@ export async function resetDemoLeaveState(db: Db): Promise<void> {
         SEED.EMP_GLOBEX,
       ],
     ])
+    // The ATS suite moves demo candidates between pipeline stages (screening→
+    // interview, offer→hired, applied→rejected); restore the seeded baseline so
+    // re-runs start from a clean pipeline.
+    await q.exec(`DELETE FROM job_candidates WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
+    await q.exec(`DELETE FROM job_openings WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
     await seedAcme(q)
     await seedGlobex(q)
+    await seedAts(q)
   })
 }
 

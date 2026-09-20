@@ -242,6 +242,100 @@ components:
               carriedOverDays: { type: number }
               remainingDays: { type: number }
 
+    JobOpening:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        departmentId: { type: string, format: uuid, nullable: true }
+        departmentName: { type: string, nullable: true }
+        locationId: { type: string, format: uuid, nullable: true }
+        locationName: { type: string, nullable: true }
+        employmentType: { type: string }
+        salaryMin: { type: string, nullable: true }
+        salaryMax: { type: string, nullable: true }
+        currency: { type: string }
+        description: { type: string, nullable: true }
+        requirements: { type: string, nullable: true }
+        headcount: { type: integer }
+        status: { type: string, enum: [draft, pending_approval, open, on_hold, closed] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    JobOpeningInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        departmentId: { type: string, format: uuid, nullable: true }
+        locationId: { type: string, format: uuid, nullable: true }
+        employmentType: { type: string, enum: [full_time, part_time, contractor], default: full_time }
+        salaryMin: { type: number, nullable: true }
+        salaryMax: { type: number, nullable: true }
+        currency: { type: string, default: USD }
+        description: { type: string, nullable: true }
+        requirements: { type: string, nullable: true }
+        headcount: { type: integer, default: 1 }
+        status: { type: string, enum: [draft, pending_approval], default: draft }
+        createdBy: { type: string, format: uuid, nullable: true }
+
+    JobOpeningPatch:
+      type: object
+      properties:
+        title: { type: string }
+        departmentId: { type: string, format: uuid, nullable: true }
+        locationId: { type: string, format: uuid, nullable: true }
+        employmentType: { type: string, enum: [full_time, part_time, contractor] }
+        salaryMin: { type: number, nullable: true }
+        salaryMax: { type: number, nullable: true }
+        currency: { type: string }
+        description: { type: string, nullable: true }
+        requirements: { type: string, nullable: true }
+        headcount: { type: integer }
+
+    Candidate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        jobOpeningId: { type: string, format: uuid }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        phone: { type: string, nullable: true }
+        resumeText: { type: string, nullable: true }
+        source: { type: string }
+        stage: { type: string, enum: [sourced, applied, screening, interview, offer, hired, rejected] }
+        rating: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+        hiredEmployeeId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    CandidateInput:
+      type: object
+      required: [firstName, lastName, email]
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        phone: { type: string, nullable: true }
+        resumeText: { type: string, nullable: true }
+        source: { type: string, enum: [referral, job_board, linkedin, careers_page, agency, other], default: other }
+        rating: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+
+    CandidatePatch:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        phone: { type: string, nullable: true }
+        resumeText: { type: string, nullable: true }
+        source: { type: string, enum: [referral, job_board, linkedin, careers_page, agency, other] }
+        rating: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+
 paths:
   /tenants/signup:
     post:
@@ -727,3 +821,249 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/LeaveSummaryRow" }
+
+  # ---------------------------------------------------------------------------
+  # Phase 2 — Recruitment / ATS (requires ats:read / ats:write / ats:approve)
+  # ---------------------------------------------------------------------------
+  /job-openings:
+    get:
+      summary: List job openings (requires ats:read)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, pending_approval, open, on_hold, closed] }
+        - name: departmentId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Paged job openings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/JobOpening" }
+        "403":
+          description: Missing ats:read
+    post:
+      summary: Create a job opening (requires ats:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobOpeningInput" }
+      responses:
+        "201":
+          description: Created opening
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobOpening" }
+        "400":
+          description: Invalid payload
+        "403":
+          description: Missing ats:write
+        "409":
+          description: Idempotency-Key already used with a different request
+  /job-openings/{jobId}:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Fetch a single job opening (requires ats:read)
+      responses:
+        "200":
+          description: The opening
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobOpening" }
+        "404":
+          description: Not found or outside this tenant
+    patch:
+      summary: Update editable opening fields (requires ats:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobOpeningPatch" }
+      responses:
+        "200":
+          description: Updated opening
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobOpening" }
+        "403":
+          description: Missing ats:write
+        "404":
+          description: Not found
+    delete:
+      summary: Soft-delete a job opening (requires ats:write)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+  /job-openings/{jobId}/submit:
+    post:
+      summary: Request approval for a draft opening (requires ats:write)
+      responses:
+        "200":
+          description: Opening now pending_approval
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobOpening" }
+        "409":
+          description: Not in draft state
+        "404":
+          description: Not found
+  /job-openings/{jobId}/decision:
+    post:
+      summary: Approve/reject/hold/close an opening (requires ats:approve)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [approved, rejected, on_hold, closed]
+                note: { type: string }
+      responses:
+        "200":
+          description: Opening status updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobOpening" }
+        "403":
+          description: Missing ats:approve
+        "409":
+          description: Decision not allowed in the current status
+        "404":
+          description: Not found
+  /job-openings/{jobId}/candidates:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: List candidates for an opening (requires ats:read)
+      parameters:
+        - name: stage
+          in: query
+          schema: { type: string, enum: [sourced, applied, screening, interview, offer, hired, rejected] }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Paged candidates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Candidate" }
+    post:
+      summary: Add a candidate to an opening (requires ats:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CandidateInput" }
+      responses:
+        "201":
+          description: Created candidate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Candidate" }
+        "400":
+          description: Invalid payload
+        "404":
+          description: Opening not found
+        "409":
+          description: Idempotency-Key already used with a different request
+  /candidates/{candidateId}:
+    parameters:
+      - name: candidateId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Fetch a single candidate (requires ats:read)
+      responses:
+        "200":
+          description: The candidate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Candidate" }
+        "404":
+          description: Not found or outside this tenant
+    patch:
+      summary: Update candidate profile fields (requires ats:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CandidatePatch" }
+      responses:
+        "200":
+          description: Updated candidate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Candidate" }
+        "403":
+          description: Missing ats:write
+        "404":
+          description: Not found
+    delete:
+      summary: Soft-delete a candidate (requires ats:write)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+  /candidates/{candidateId}/transition:
+    post:
+      summary: Move a candidate to another pipeline stage (requires ats:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage]
+              properties:
+                stage:
+                  type: string
+                  enum: [sourced, applied, screening, interview, offer, hired, rejected]
+      responses:
+        "200":
+          description: Stage updated (hired only from offer; terminal stages are final)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Candidate" }
+        "409":
+          description: Transition not allowed
+        "404":
+          description: Not found

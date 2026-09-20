@@ -7,6 +7,9 @@ export const PERMISSIONS = {
   ATTENDANCE_READ: 'attendance:read',
   AUDIT_READ: 'audit:read',
   REPORTING_READ: 'reporting:read',
+  ATS_READ: 'ats:read',
+  ATS_WRITE: 'ats:write',
+  ATS_APPROVE: 'ats:approve',
 } as const
 
 export const PERMISSION_CODES = Object.values(PERMISSIONS)
@@ -26,6 +29,9 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.ATTENDANCE_READ,
       PERMISSIONS.AUDIT_READ,
       PERMISSIONS.REPORTING_READ,
+      PERMISSIONS.ATS_READ,
+      PERMISSIONS.ATS_WRITE,
+      PERMISSIONS.ATS_APPROVE,
     ],
   },
   hr_manager: {
@@ -38,6 +44,9 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.ATTENDANCE_READ,
       PERMISSIONS.AUDIT_READ,
       PERMISSIONS.REPORTING_READ,
+      PERMISSIONS.ATS_READ,
+      PERMISSIONS.ATS_WRITE,
+      PERMISSIONS.ATS_APPROVE,
     ],
   },
   manager: {
@@ -47,6 +56,9 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.LEAVE_READ,
       PERMISSIONS.LEAVE_APPROVE,
       PERMISSIONS.ATTENDANCE_READ,
+      // Managers raise requisitions (write) but approval/posting stays with HR/admin.
+      PERMISSIONS.ATS_READ,
+      PERMISSIONS.ATS_WRITE,
     ],
   },
   employee: {

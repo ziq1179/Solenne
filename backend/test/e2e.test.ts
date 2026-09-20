@@ -625,3 +625,213 @@ describe('tenant self-service signup', () => {
     expect(weakPassword.statusCode).toBe(400)
   })
 })
+
+describe('recruiting (ats)', () => {
+  it('lists seeded job openings; employees without ats:read are denied', async () => {
+    const res = await app.inject({ method: 'GET', url: '/job-openings', headers: auth(admin) })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(body.total).toBe(2)
+    const titles = body.data.map((j: { title: string }) => j.title)
+    expect(titles).toContain('Senior Product Designer')
+    const designer = body.data.find((j: { id: string }) => j.id === SEED.JOB_DESIGNER)
+    expect(designer.status).toBe('open')
+    expect(designer.departmentName).toBe('Design')
+
+    const denied = await app.inject({ method: 'GET', url: '/job-openings', headers: auth(aisha) })
+    expect(denied.statusCode).toBe(403)
+  })
+
+  it('runs a requisition through draft → submit → approve → open → close', async () => {
+    const key = '00000000-0000-4000-8000-0000000000ba'
+    const created = await app.inject({
+      method: 'POST',
+      url: '/job-openings',
+      headers: { ...auth(admin), 'Idempotency-Key': key },
+      payload: {
+        title: 'QA Engineer',
+        departmentId: SEED.DEPT_ENG,
+        locationId: SEED.LOC_LHR,
+        employmentType: 'full_time',
+        salaryMin: 30000,
+        salaryMax: 45000,
+        headcount: 2,
+        status: 'draft',
+      },
+    })
+    expect(created.statusCode).toBe(201)
+    const job = created.json()
+    expect(job.status).toBe('draft')
+    expect(job.departmentName).toBe('Engineering')
+
+    // Managers may raise requisitions but not approve them.
+    const managerDenied = await app.inject({
+      method: 'POST',
+      url: `/job-openings/${job.id}/decision`,
+      headers: auth(priya),
+      payload: { decision: 'approved' },
+    })
+    expect(managerDenied.statusCode).toBe(403)
+
+    const submitted = await app.inject({
+      method: 'POST',
+      url: `/job-openings/${job.id}/submit`,
+      headers: auth(admin),
+      payload: {},
+    })
+    expect(submitted.statusCode).toBe(200)
+    expect(submitted.json().status).toBe('pending_approval')
+
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/job-openings/${job.id}/decision`,
+      headers: auth(admin),
+      payload: { decision: 'approved', note: 'Budget approved' },
+    })
+    expect(approved.statusCode).toBe(200)
+    expect(approved.json().status).toBe('open')
+
+    // An open opening can be put on hold then closed; a rejected draft cannot.
+    const hold = await app.inject({
+      method: 'POST',
+      url: `/job-openings/${job.id}/decision`,
+      headers: auth(admin),
+      payload: { decision: 'on_hold' },
+    })
+    expect(hold.json().status).toBe('on_hold')
+    const closed = await app.inject({
+      method: 'POST',
+      url: `/job-openings/${job.id}/decision`,
+      headers: auth(admin),
+      payload: { decision: 'closed' },
+    })
+    expect(closed.json().status).toBe('closed')
+
+    // Cleanup so re-runs don't accumulate throwaway openings.
+    const bye = await app.inject({
+      method: 'DELETE',
+      url: `/job-openings/${job.id}`,
+      headers: auth(admin),
+    })
+    expect(bye.statusCode).toBe(204)
+  })
+
+  it('enforces the candidate pipeline workflow', async () => {
+    const list = await app.inject({
+      method: 'GET',
+      url: `/job-openings/${SEED.JOB_DESIGNER}/candidates`,
+      headers: auth(admin),
+    })
+    expect(list.statusCode).toBe(200)
+    expect(list.json().total).toBe(3)
+
+    const offered = await app.inject({
+      method: 'GET',
+      url: `/job-openings/${SEED.JOB_DESIGNER}/candidates?stage=offer`,
+      headers: auth(admin),
+    })
+    expect(offered.json().data.map((c: { id: string }) => c.id)).toEqual([SEED.CAND_OFFER])
+
+    // screening → interview is fine; skipping straight to hired is not.
+    const advance = await app.inject({
+      method: 'POST',
+      url: `/candidates/${SEED.CAND_RYO}/transition`,
+      headers: auth(admin),
+      payload: { stage: 'interview' },
+    })
+    expect(advance.statusCode).toBe(200)
+    expect(advance.json().stage).toBe('interview')
+
+    const prematureHire = await app.inject({
+      method: 'POST',
+      url: `/candidates/${SEED.CAND_RYO}/transition`,
+      headers: auth(admin),
+      payload: { stage: 'hired' },
+    })
+    expect(prematureHire.statusCode).toBe(409)
+
+    // offer → hired works, and hired is terminal.
+    const hire = await app.inject({
+      method: 'POST',
+      url: `/candidates/${SEED.CAND_OFFER}/transition`,
+      headers: auth(admin),
+      payload: { stage: 'hired' },
+    })
+    expect(hire.statusCode).toBe(200)
+    expect(hire.json().stage).toBe('hired')
+    const undoHire = await app.inject({
+      method: 'POST',
+      url: `/candidates/${SEED.CAND_OFFER}/transition`,
+      headers: auth(admin),
+      payload: { stage: 'applied' },
+    })
+    expect(undoHire.statusCode).toBe(409)
+
+    // applied → rejected works, and rejected is terminal.
+    const reject = await app.inject({
+      method: 'POST',
+      url: `/candidates/${SEED.CAND_LENA}/transition`,
+      headers: auth(admin),
+      payload: { stage: 'rejected' },
+    })
+    expect(reject.statusCode).toBe(200)
+    const undoReject = await app.inject({
+      method: 'POST',
+      url: `/candidates/${SEED.CAND_LENA}/transition`,
+      headers: auth(admin),
+      payload: { stage: 'screening' },
+    })
+    expect(undoReject.statusCode).toBe(409)
+  })
+
+  it('creates, updates, and soft-deletes a candidate; cross-tenant stays isolated', async () => {
+    const key = '00000000-0000-4000-8000-0000000000bc'
+    const created = await app.inject({
+      method: 'POST',
+      url: `/job-openings/${SEED.JOB_DESIGNER}/candidates`,
+      headers: { ...auth(admin), 'Idempotency-Key': key },
+      payload: {
+        firstName: 'Ava',
+        lastName: 'Ross',
+        email: 'ava.ross@example.com',
+        source: 'referral',
+        resumeText: 'Referral from Marcus Webb; 4 years design systems.',
+        rating: 3,
+      },
+    })
+    expect(created.statusCode).toBe(201)
+    const candidate = created.json()
+    expect(candidate.stage).toBe('sourced')
+    expect(candidate.source).toBe('referral')
+
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: `/candidates/${candidate.id}`,
+      headers: auth(admin),
+      payload: { rating: 5, notes: 'Design lead material' },
+    })
+    expect(updated.statusCode).toBe(200)
+    expect(updated.json().rating).toBe(5)
+
+    // RLS: globex never sees acme candidates.
+    const crossTenant = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidate.id}`,
+      headers: auth(globexAdmin),
+    })
+    expect(crossTenant.statusCode).toBe(404)
+
+    const gone = await app.inject({
+      method: 'DELETE',
+      url: `/candidates/${candidate.id}`,
+      headers: auth(admin),
+    })
+    expect(gone.statusCode).toBe(204)
+    const fetchGone = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidate.id}`,
+      headers: auth(admin),
+    })
+    expect(fetchGone.statusCode).toBe(404)
+  })
+})

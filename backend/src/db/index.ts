@@ -1,5 +1,5 @@
 import { Pool, type PoolClient } from 'pg'
-import { applyBaseSchema, APP_ROLE, hardenRls, isHardeningApplied, isSchemaApplied, type SqlExecutor } from './schema.js'
+import { applyAtsSchema, applyBaseSchema, APP_ROLE, hardenRls, isHardeningApplied, isSchemaApplied, type SqlExecutor } from './schema.js'
 import { ulidSafeUuid, sha256Hex } from '../lib/crypto.js'
 
 export interface PoolOptions {
@@ -75,6 +75,9 @@ export class Db {
       if (!(await isHardeningApplied(q))) {
         await hardenRls(q)
       }
+      // Phase 2 migrations + re-hardening (idempotent) run on EVERY boot so
+      // both fresh and existing databases converge on the latest schema.
+      await applyAtsSchema(q)
     } finally {
       client.release()
     }
