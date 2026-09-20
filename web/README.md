@@ -4,6 +4,18 @@ Client app for the Trellis HRMS platform (backend: `../backend`). Next.js 16.3.5
 TypeScript + Tailwind v4, fully client-side with TanStack Query, consuming the
 deployed backend API (`https://backend-liard-chi-84.vercel.app`).
 
+**Live:** https://solenne-ess-prod.vercel.app (Vercel project `solenne-ess`,
+git-connected to `main`, root dir `web/`, framework preset Next.js).
+
+## Deployment
+
+Deploys automatically on every push to `main` (git integration on the
+`solenne-ess` Vercel project). Manual override:
+
+```bash
+vercel --cwd web --prod --yes
+```
+
 ## Pages
 
 | Route | Access | What it does |
