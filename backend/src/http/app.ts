@@ -8,6 +8,7 @@ import { registerAuthRoutes } from '../modules/auth/auth.routes.js'
 import { registerEmployeeRoutes } from '../modules/employees/employees.routes.js'
 import { registerLeaveRoutes } from '../modules/leave/leave.routes.js'
 import { registerAttendanceRoutes } from '../modules/attendance/attendance.routes.js'
+import { registerReportRoutes } from '../modules/reports/reports.routes.js'
 
 function landingPage(): string {
   return `<!doctype html>
@@ -50,7 +51,7 @@ function landingPage(): string {
   <body>
     <main>
       <h1>Solenne <span>—</span> Trellis HR API</h1>
-      <p class="lead">The backend for the Trellis HRMS SaaS platform. Tenancy, auth/IAM, core HR, leave, attendance and audit — with per-tenant Row-Level-Security.</p>
+      <p class="lead">The backend for the Trellis HRMS SaaS platform. Tenancy, auth/IAM, core HR, leave, attendance, reporting and audit — with per-tenant Row-Level-Security.</p>
       <div class="status">● API online</div>
       <ul>
         <li><a href="/health">/health</a> — <code>liveness probe</code></li>
@@ -94,6 +95,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   registerEmployeeRoutes(fastify)
   registerLeaveRoutes(fastify)
   registerAttendanceRoutes(fastify)
+  registerReportRoutes(fastify)
 
   return fastify
 }

@@ -6,6 +6,7 @@ export const PERMISSIONS = {
   LEAVE_APPROVE: 'leave:approve',
   ATTENDANCE_READ: 'attendance:read',
   AUDIT_READ: 'audit:read',
+  REPORTING_READ: 'reporting:read',
 } as const
 
 export const PERMISSION_CODES = Object.values(PERMISSIONS)
@@ -24,6 +25,7 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.LEAVE_APPROVE,
       PERMISSIONS.ATTENDANCE_READ,
       PERMISSIONS.AUDIT_READ,
+      PERMISSIONS.REPORTING_READ,
     ],
   },
   hr_manager: {
@@ -35,6 +37,7 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.LEAVE_APPROVE,
       PERMISSIONS.ATTENDANCE_READ,
       PERMISSIONS.AUDIT_READ,
+      PERMISSIONS.REPORTING_READ,
     ],
   },
   manager: {

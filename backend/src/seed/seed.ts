@@ -326,6 +326,26 @@ export async function resetDemoLeaveState(db: Db): Promise<void> {
     await q.exec(`DELETE FROM attendance_records WHERE tenant_id = ANY($1::uuid[])`, [
       [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
     ])
+    // The HR suite creates+terminates throwaway employees (Zara, Temp Worker)
+    // with random ids; without wiping them, re-runs accumulate terminated rows
+    // and headcount/leave assertions drift. Keep only the canonical seed roster
+    // and drop the rest (FK-clean order: history/compensation first).
+    await q.exec(`DELETE FROM employment_history WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
+    await q.exec(`DELETE FROM compensation_records WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
+    await q.exec(`DELETE FROM employees WHERE tenant_id = ANY($1::uuid[]) AND id <> ALL($2::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+      [
+        SEED.EMP_ADMIN,
+        SEED.EMP_PRIYA,
+        SEED.EMP_AISHA,
+        SEED.EMP_MARCUS,
+        SEED.EMP_GLOBEX,
+      ],
+    ])
     await seedAcme(q)
     await seedGlobex(q)
   })

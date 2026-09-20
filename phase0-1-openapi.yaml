@@ -174,6 +174,74 @@ components:
         entityId: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
 
+    CountByName:
+      type: object
+      properties:
+        id: { type: string, format: uuid, nullable: true }
+        name: { type: string, nullable: true }
+        count: { type: integer }
+
+    HeadcountReport:
+      type: object
+      properties:
+        total: { type: integer }
+        byDepartment:
+          type: array
+          items: { $ref: "#/components/schemas/CountByName" }
+        byLocation:
+          type: array
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/CountByName" }
+              - type: object
+                properties:
+                  country: { type: string, nullable: true }
+        byEmploymentType:
+          type: array
+          items:
+            type: object
+            properties:
+              employmentType: { type: string }
+              count: { type: integer }
+
+    AttendanceSummary:
+      type: object
+      properties:
+        totalEmployees: { type: integer }
+        totalClockIns: { type: integer }
+        totalMinutes: { type: integer }
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              employeeId: { type: string, format: uuid }
+              employeeNumber: { type: string }
+              firstName: { type: string }
+              lastName: { type: string }
+              departmentName: { type: string, nullable: true }
+              clockIns: { type: integer }
+              totalMinutes: { type: integer }
+
+    LeaveSummaryRow:
+      type: object
+      properties:
+        employeeId: { type: string, format: uuid }
+        employeeNumber: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        balances:
+          type: array
+          items:
+            type: object
+            properties:
+              leaveTypeId: { type: string, format: uuid }
+              leaveTypeName: { type: string }
+              accruedDays: { type: number }
+              usedDays: { type: number }
+              carriedOverDays: { type: number }
+              remainingDays: { type: number }
+
 paths:
   /auth/login:
     post:
@@ -557,3 +625,55 @@ paths:
                   page: { type: integer }
                   pageSize: { type: integer }
                   total: { type: integer }
+
+  /reports/headcount:
+    get:
+      summary: Headcount by department, location and employment type (requires reporting:read)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, on_leave, terminated], default: active }
+      responses:
+        "200":
+          description: Headcount breakdown
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HeadcountReport" }
+        "403":
+          description: Insufficient permissions (requires reporting:read)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /reports/attendance-summary:
+    get:
+      summary: Clock-ins and minutes worked per employee in a date range (requires reporting:read)
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Attendance summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttendanceSummary" }
+
+  /reports/leave-summary:
+    get:
+      summary: Accrued/used/remaining leave balances per employee for a year (requires reporting:read)
+      parameters:
+        - name: year
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Leave balance summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LeaveSummaryRow" }

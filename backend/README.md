@@ -1,7 +1,7 @@
 # Trellis HRMS API — Phase 0/1
 
 Backend for the Trellis HRMS SaaS platform: tenancy, auth/IAM, core HR, leave,
-attendance, and audit. Fastify 5 + TypeScript (ESM) on top of `pg` connection
+attendance, reporting, and audit. Fastify 5 + TypeScript (ESM) on top of `pg` connection
 pools (indexed by tenant-role), with per-request **Row-Level-Security** tenant
 isolation enforced inside PostgreSQL itself.
 
@@ -55,21 +55,24 @@ pnpm dev                    # http://localhost:4000
 ## Test suite
 
 ```bash
-pnpm test   # 16 e2e tests against DATABASE_URL (Neon). ~105s cold, re-runnable.
+pnpm test   # 20 e2e tests against DATABASE_URL (Neon). ~120s cold, re-runnable.
 ```
 
 Covers: login/JWT/refresh-rotation, idempotent `POST /employees` (replay of the
 same Idempotency-Key returns the stored 201, not a duplicate), `POST /leave`
 submit + `PATCH /leave/:id` approve (balance arithmetic), attendance clock-in/
 out (single open record per employee, idempotent replay, self vs directory vs
-cross-tenant scoped reads), tenure-history trail, employee offboarding,
+cross-tenant scoped reads), reporting (`/reports/headcount`, `/reports/attendance-summary`,
+`/reports/leave-summary` — aggregates stay tenant-pure; self-service users get 403),
+tenure-history trail, employee offboarding,
 manager/self permission guards, cross-tenant 404s (employee isolation), and a
 **12-way `Promise.all` RLS isolation burst**
 (6 Acme + 6 Globex concurrent queries — every one stays within its own tenant).
 
-The suite mutates leave requests/approvals, so it calls
-`resetDemoLeaveState(db)` in `beforeAll` to restore the demo baseline before
-each run — which is why it's safe to re-run against the same Neon database.
+The suite mutates leave requests/approvals and creates+offboards throwaway
+employees, so it calls `resetDemoLeaveState(db)` in `beforeAll` to restore the
+demo baseline (balances, attendance, and non-seed employees) before each run —
+which is why it's safe to re-run against the same Neon database.
 
 **Windows notes**
 

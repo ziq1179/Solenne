@@ -438,3 +438,87 @@ describe('attendance', () => {
     expect(anon.statusCode).toBe(401)
   })
 })
+
+describe('reports', () => {
+  it('headcount: aggregates by department/location/type, excludes terminated, stays tenant-pure', async () => {
+    const acme = await app.inject({ method: 'GET', url: '/reports/headcount', headers: auth(admin) })
+    expect(acme.statusCode).toBe(200)
+    const body = acme.json()
+    // Seeded trio + Marcus + the employee the employees suite creates (Zara).
+    expect(body.total).toBe(5)
+    expect(body.byDepartment.reduce((s: number, d: { count: number }) => s + d.count, 0)).toBe(body.total)
+    expect(body.byLocation.reduce((s: number, l: { count: number }) => s + l.count, 0)).toBe(body.total)
+    expect(body.byEmploymentType.reduce((s: number, t: { count: number }) => s + t.count, 0)).toBe(body.total)
+
+    const design = body.byDepartment.find((d: { id: string }) => d.id === SEED.DEPT_DESIGN)
+    expect(design?.count).toBe(3)
+    const lhr = body.byLocation.find((l: { id: string }) => l.id === SEED.LOC_LHR)
+    expect(lhr?.count).toBe(3)
+
+    // The offboards test terminated Temp Worker: it must not appear as active.
+    const terminated = await app.inject({
+      method: 'GET',
+      url: '/reports/headcount?status=terminated',
+      headers: auth(admin),
+    })
+    expect(terminated.statusCode).toBe(200)
+    expect(terminated.json().total).toBe(1)
+
+    // Cross-tenant isolation: globex only ever sees its own rows.
+    const globex = await app.inject({ method: 'GET', url: '/reports/headcount', headers: auth(globexAdmin) })
+    expect(globex.json().total).toBe(1)
+  })
+
+  it('denies reporting to a self-service employee', async () => {
+    const res = await app.inject({ method: 'GET', url: '/reports/headcount', headers: auth(aisha) })
+    expect(res.statusCode).toBe(403)
+    const anon = await app.inject({ method: 'GET', url: '/reports/headcount' })
+    expect(anon.statusCode).toBe(401)
+  })
+
+  it('attendance-summary: aggregates clock-ins and minutes in range', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/reports/attendance-summary?from=2020-01-01&to=2999-01-01',
+      headers: auth(admin),
+    })
+    expect(res.statusCode).toBe(200)
+    const summary = res.json()
+    expect(summary.rows.length).toBeGreaterThanOrEqual(1)
+    expect(summary.totalClockIns).toBeGreaterThanOrEqual(2)
+
+    const aishaRow = summary.rows.find((r: { employeeId: string }) => r.employeeId === SEED.EMP_AISHA)
+    expect(aishaRow).toBeTruthy()
+    expect(aishaRow.clockIns).toBeGreaterThanOrEqual(1)
+    expect(aishaRow.totalMinutes).toBeGreaterThanOrEqual(0)
+
+    // Admin left an open record in the attendance idempotency-replay test.
+    const adminRow = summary.rows.find((r: { employeeId: string }) => r.employeeId === SEED.EMP_ADMIN)
+    expect(adminRow).toBeTruthy()
+
+    const badRange = await app.inject({
+      method: 'GET',
+      url: '/reports/attendance-summary?from=2999-01-01&to=2020-01-01',
+      headers: auth(admin),
+    })
+    expect(badRange.statusCode).toBe(400)
+  })
+
+  it('leave-summary: reflects balances already mutated by the leave suite', async () => {
+    const res = await app.inject({ method: 'GET', url: '/reports/leave-summary?year=2026', headers: auth(admin) })
+    expect(res.statusCode).toBe(200)
+
+    const aishaRow = res.json().find((r: { employeeId: string }) => r.employeeId === SEED.EMP_AISHA)
+    const annual = aishaRow.balances.find((b: { leaveTypeId: string }) => b.leaveTypeId === SEED.LEAVE_ANNUAL)
+    expect(annual.accruedDays).toBeCloseTo(24)
+    expect(annual.usedDays).toBeCloseTo(11.5) // 9.5 seeded + 2 approved by the leave suite
+    expect(annual.remainingDays).toBeCloseTo(12.5)
+
+    const globex = await app.inject({
+      method: 'GET',
+      url: '/reports/leave-summary?year=2026',
+      headers: auth(globexAdmin),
+    })
+    expect(globex.json().map((r: { employeeId: string }) => r.employeeId)).toEqual([SEED.EMP_GLOBEX])
+  })
+})
