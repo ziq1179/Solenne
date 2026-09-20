@@ -8,6 +8,8 @@ import { newId } from '../../db/index.js'
 import { PERMISSIONS } from '../permissions.js'
 import * as employeesRepo from '../employees/employees.repo.js'
 import * as repo from './onboarding.repo.js'
+import { notify, userAccountIdForEmployee } from '../notifications/notifications.repo.js'
+import { recordUsage } from '../billing/billing.repo.js'
 
 const taskInputSchema = z.object({
   name: z.string().min(1).max(200),
@@ -296,6 +298,25 @@ export function registerOnboardingRoutes(fastify: FastifyInstance): void {
             after: plan,
             ip: req.ip,
           })
+          await recordUsage(q, {
+            tenantId,
+            metric: 'onboarding_plans',
+            quantity: 1,
+            entityType: 'onboarding_plan',
+            entityId: plan.id,
+          })
+          const employeeUserId = await userAccountIdForEmployee(q, employee.id)
+          if (employeeUserId) {
+            await notify(q, {
+              tenantId,
+              recipientUserId: employeeUserId,
+              type: `onboarding.${template.kind}_started`,
+              title: `${template.kind === 'onboarding' ? 'Onboarding' : 'Offboarding'} plan started`,
+              body: `${plan.templateName ?? 'Checklist'} was started for you`,
+              entityType: 'onboarding_plan',
+              entityId: plan.id,
+            })
+          }
           return { status: 201, body: plan }
         }),
       )
@@ -337,6 +358,24 @@ export function registerOnboardingRoutes(fastify: FastifyInstance): void {
           completedBy: req.ctx.userId,
         })
         if (!updated) throw httpError.notFound('Plan task not found')
+
+        // Domain event: plan auto-completes when the final task is terminal → ping the employee.
+        // (`before.status` is guaranteed 'in_progress' by the guard above.)
+        const after = await repo.getPlan(q, planId)
+        if (after?.status === 'completed') {
+          const employeeUserId = await userAccountIdForEmployee(q, after.employeeId)
+          if (employeeUserId) {
+            await notify(q, {
+              tenantId,
+              recipientUserId: employeeUserId,
+              type: `onboarding.${after.kind}_completed`,
+              title: `${after.kind === 'onboarding' ? 'Onboarding' : 'Offboarding'} plan complete`,
+              body: `${after.templateName ?? 'Checklist'} is fully done — great work!`,
+              entityType: 'onboarding_plan',
+              entityId: planId,
+            })
+          }
+        }
         return updated
       })
       const plan = await db.tenant(tenantId, (q) => repo.getPlan(q, planId))

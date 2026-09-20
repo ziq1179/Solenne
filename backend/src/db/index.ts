@@ -1,5 +1,5 @@
 import { Pool, type PoolClient } from 'pg'
-import { applyAtsSchema, applyBaseSchema, applyOnboardingSchema, APP_ROLE, hardenRls, isHardeningApplied, isSchemaApplied, type SqlExecutor } from './schema.js'
+import { applyAtsSchema, applyBaseSchema, applyBillingSchema, applyNotificationsSchema, applyOnboardingSchema, ensureMigrationTable, isHardeningApplied, isPhase2Applied, isSchemaApplied, markPhase2Applied, APP_ROLE, hardenRls, type SqlExecutor } from './schema.js'
 import { ulidSafeUuid, sha256Hex } from '../lib/crypto.js'
 
 export interface PoolOptions {
@@ -23,6 +23,9 @@ export interface Q {
 export interface Row {
   [column: string]: unknown
 }
+
+/** Advisory-lock key for the schema bootstrap (arbitrary but stable int8). */
+const MIGRATION_LOCK_KEY = 81972301
 
 function toQ(client: PoolClient): Q {
   return {
@@ -67,18 +70,44 @@ export class Db {
     const client = await pool.connect()
     try {
       const q = toQ(client)
-      if (!(await isSchemaApplied(q))) {
-        await applyBaseSchema(q)
+      // The bootstrap is check-then-act (is*Applied guards), so a fresh deploy
+      // can race N serverless instances: each sees "not applied" and starts
+      // the DDL + hardening pass at once. Serialize with a session-level
+      // advisory lock on THIS connection — the first instance runs the
+      // idempotent migrations and records the schema_migrations markers;
+      // everyone else blocks, sees the markers, and becomes a no-op. The lock
+      // is released explicitly below, and a crash mid-pass is safe because
+      // TCP teardown frees session-level advisory locks.
+      await client.query(`SELECT pg_advisory_lock($1)`, [MIGRATION_LOCK_KEY])
+      try {
+        if (!(await isSchemaApplied(q))) {
+          await applyBaseSchema(q)
+        }
+        // Hardening is conditional (and idempotent): a schema may exist but not
+        // yet be hardened, e.g. if an earlier migration died mid-way.
+        if (!(await isHardeningApplied(q))) {
+          await hardenRls(q)
+        }
+        // Phase 2 migrations run once per version (recorded in schema_migrations)
+        // instead of every boot: each phase re-does its DDL + a full hardening
+        // pass, and those hundreds of round trips over the Neon pooler pushed the
+        // e2e boot hook past its timeout. First boot on an untouched database
+        // still converges every environment, then the marker persists.
+        await ensureMigrationTable(q)
+        for (const [name, apply] of [
+          ['phase2-ats', applyAtsSchema],
+          ['phase2-onboarding', applyOnboardingSchema],
+          ['phase2-notifications', applyNotificationsSchema],
+          ['phase2-billing', applyBillingSchema],
+        ] as [string, (exec: SqlExecutor) => Promise<void>][]) {
+          if (!(await isPhase2Applied(q, name))) {
+            await apply(q)
+          }
+          await markPhase2Applied(q, name)
+        }
+      } finally {
+        await client.query(`SELECT pg_advisory_unlock($1)`, [MIGRATION_LOCK_KEY])
       }
-      // Hardening is conditional (and idempotent): a schema may exist but not
-      // yet be hardened, e.g. if an earlier migration died mid-way.
-      if (!(await isHardeningApplied(q))) {
-        await hardenRls(q)
-      }
-      // Phase 2 migrations + re-hardening (idempotent) run on EVERY boot so
-      // both fresh and existing databases converge on the latest schema.
-      await applyAtsSchema(q)
-      await applyOnboardingSchema(q)
     } finally {
       client.release()
     }

@@ -53,6 +53,11 @@ export const TENANT_SCOPED_TABLES = [
   'onboarding_template_tasks',
   'onboarding_plans',
   'onboarding_tasks',
+  // Phase 2 — In-app notifications.
+  'notifications',
+  // Phase 2 — Billing & metering.
+  'subscriptions',
+  'usage_events',
 ]
 
 /** Extra DDL appended after the canonical schema (extensions to the Phase 0/1 surface). */
@@ -88,11 +93,11 @@ export async function applyBaseSchema(exec: SqlExecutor): Promise<void> {
 }
 
 /**
- * Phase 2 migrations, applied idempotently on every boot (existing environments
- * skip applyBaseSchema because the base schema is already present). The DDL uses
- * `IF NOT EXISTS`; the hardening pass that follows is itself idempotent
- * (ownership transfer, policy (re)creation, FORCE RLS) and now covers the ATS
- * tables via TENANT_SCOPED_TABLES.
+ * Phase 2 migrations. The DDL uses `IF NOT EXISTS`; the hardening pass that
+ * follows is itself idempotent (ownership transfer, policy (re)creation, FORCE
+ * RLS) and now covers the ATS tables via TENANT_SCOPED_TABLES. These are gated
+ * by an explicit marker (see ensureMigrationTable / Db.open) so they run once
+ * per version instead of re-doing the whole DDL + hardening on every boot.
  */
 export async function applyAtsSchema(exec: SqlExecutor): Promise<void> {
   const atsUrl = new URL('../../../phase2-ats.sql', import.meta.url)
@@ -110,6 +115,26 @@ export async function applyOnboardingSchema(exec: SqlExecutor): Promise<void> {
   const onboardingUrl = new URL('../../../phase2-onboarding.sql', import.meta.url)
   const onboarding = await readFile(onboardingUrl, 'utf8')
   await exec.exec(transformSchema(onboarding))
+  await hardenRls(exec)
+}
+
+/**
+ * Phase 2 migration 3 — In-app notifications. Same mechanism as the other
+ * Phase 2 migrations: `IF NOT EXISTS` DDL + idempotent RLS hardening re-run.
+ */
+export async function applyNotificationsSchema(exec: SqlExecutor): Promise<void> {
+  const url = new URL('../../../phase2-notifications.sql', import.meta.url)
+  await exec.exec(transformSchema(await readFile(url, 'utf8')))
+  await hardenRls(exec)
+}
+
+/**
+ * Phase 2 migration 4 — Billing & metering. Same mechanism as the other
+ * Phase 2 migrations: `IF NOT EXISTS` DDL + idempotent RLS hardening re-run.
+ */
+export async function applyBillingSchema(exec: SqlExecutor): Promise<void> {
+  const url = new URL('../../../phase2-billing.sql', import.meta.url)
+  await exec.exec(transformSchema(await readFile(url, 'utf8')))
   await hardenRls(exec)
 }
 
@@ -195,4 +220,34 @@ export async function isHardeningApplied(exec: SqlExecutor): Promise<boolean> {
 export async function isSchemaApplied(exec: SqlExecutor): Promise<boolean> {
   const res = await exec.query<{ c: string | null }>(`SELECT to_regclass('public.tenants') AS c`)
   return res.rows[0]?.c != null
+}
+
+/**
+ * Version marker for the Phase 2 migrations. Without a guard, Db.open re-ran
+ * every phase's DDL + full hardening pass on each boot — hundreds of
+ * per-statement round trips over the Neon pooler (~160s) that blew the e2e
+ * boot hook. Recorded once, skipped afterwards (same philosophy as
+ * isSchemaApplied for the base schema). First boot on an existing database is
+ * still slower: the phases re-apply (idempotent `IF NOT EXISTS`) so a database
+ * that never recorded the marker converges, then the marker is persisted.
+ */
+export async function ensureMigrationTable(exec: SqlExecutor): Promise<void> {
+  await exec.exec(
+    `CREATE TABLE IF NOT EXISTS schema_migrations (
+       name       TEXT PRIMARY KEY,
+       applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+     )`,
+  )
+}
+
+export async function isPhase2Applied(exec: SqlExecutor, name: string): Promise<boolean> {
+  const res = await exec.query<{ applied: number }>(
+    `SELECT 1 AS applied FROM schema_migrations WHERE name = $1`,
+    [name],
+  )
+  return res.rows.length > 0
+}
+
+export async function markPhase2Applied(exec: SqlExecutor, name: string): Promise<void> {
+  await exec.exec(`INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [name])
 }

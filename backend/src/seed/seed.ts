@@ -43,6 +43,10 @@ export const SEED = {
   // Phase 2 — Onboarding/Offboarding templates (Acme).
   ONB_TEMPLATE_HIRE: '2b000000-0000-4000-8000-000000000001',
   ONB_TEMPLATE_EXIT: '2b000000-0000-4000-8000-000000000002',
+
+  // Phase 2 — Billing subscriptions (one per demo tenant).
+  SUB_ACME: '3c000000-0000-4000-8000-000000000001',
+  SUB_GLOBEX: '3c000000-0000-4000-8000-000000000002',
 } as const
 
 interface SeedUser {
@@ -51,6 +55,14 @@ interface SeedUser {
   password: string
   roles: (keyof typeof SYSTEM_ROLES)[]
 }
+
+/** Demo tenant roster the seed/reset operations are confined to (kept as
+ *  literals below: node-postgres forbids bind parameters in multi-statement
+ *  query strings, and these ids are compile-time constants). */
+const DEMO_TENANTS = `'{${SEED.TENANT_ACME},${SEED.TENANT_GLOBEX}}'::uuid[]`
+
+/** The canonical seed roster that resets KEEP — everything else is purged. */
+const KEPT_EMPLOYEES = `'{${SEED.EMP_ADMIN},${SEED.EMP_PRIYA},${SEED.EMP_AISHA},${SEED.EMP_MARCUS},${SEED.EMP_GLOBEX}}'::uuid[]`
 
 const ACME_USERS: SeedUser[] = [
   { id: SEED.USER_ADMIN, email: 'admin@acme.com', password: 'admin123', roles: ['admin', 'employee'] },
@@ -96,13 +108,17 @@ export async function seedRolesForTenant(q: Q, tenantId: string, permissionIds: 
     // Reconcile the system role's permission set instead of "insert if absent":
     // a re-seed must reflect permission changes shipped in later releases.
     await q.exec(`DELETE FROM role_permissions WHERE role_id = $1`, [roleId])
-    for (const permCode of def.permissions) {
-      const permissionId = permissionIds[permCode]
-      if (!permissionId) continue
+    // Batch the grant inserts into one round trip via unnest (same lesson as
+    // seedPermissions): a for-loop of INSERTs is N pooler round trips.
+    const permissionIdsForRole = def.permissions
+      .map((permCode) => permissionIds[permCode])
+      .filter((permissionId): permissionId is string => Boolean(permissionId))
+    if (permissionIdsForRole.length) {
       await q.exec(
-        `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)
+        `INSERT INTO role_permissions (role_id, permission_id)
+         SELECT $1, id FROM unnest($2::uuid[]) AS id
          ON CONFLICT (role_id, permission_id) DO NOTHING`,
-        [roleId, permissionId],
+        [roleId, permissionIdsForRole],
       )
     }
   }
@@ -373,12 +389,29 @@ async function seedGlobex(q: Q): Promise<void> {
   )
 }
 
+async function seedBilling(q: Q): Promise<void> {
+  // Acme is on the 'grow' plan (matches the tenant row); Globex on 'core'.
+  await q.exec(
+    `INSERT INTO subscriptions (id, tenant_id, plan, status, seat_limit)
+     VALUES ($1, $2, 'grow', 'active', 100)
+     ON CONFLICT (tenant_id) DO NOTHING`,
+    [SEED.SUB_ACME, SEED.TENANT_ACME],
+  )
+  await q.exec(
+    `INSERT INTO subscriptions (id, tenant_id, plan, status, seat_limit)
+     VALUES ($1, $2, 'core', 'active', 25)
+     ON CONFLICT (tenant_id) DO NOTHING`,
+    [SEED.SUB_GLOBEX, SEED.TENANT_GLOBEX],
+  )
+}
+
 async function seedAll(db: Db): Promise<void> {
   await db.system(async (q) => {
     await seedAcme(q)
     await seedGlobex(q)
     await seedAts(q)
     await seedOnboarding(q)
+    await seedBilling(q)
   })
 }
 
@@ -390,9 +423,10 @@ export async function seedDatabase(db: Db): Promise<void> {
   await db.system(async (q) => {
     // Phase 2 demo data is seeded before the Phase 0/1 fast path: an already
     // populated database (e.g. production) still picks up the ATS sample jobs
-    // and the default onboarding/offboarding checklists.
+    // and the default onboarding/offboarding checklists + billing rows.
     await seedAts(q)
     await seedOnboarding(q)
+    await seedBilling(q)
     // Fast path: neon-pooler round trips are slow; skip once fully seeded.
     const existing = await q.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM employees WHERE tenant_id = ANY($1::uuid[])`,
@@ -415,65 +449,34 @@ export async function seedDatabase(db: Db): Promise<void> {
  */
 export async function resetDemoLeaveState(db: Db): Promise<void> {
   await db.system(async (q) => {
-    // Leave data (requests + balances) is the one thing the e2e suite mutates
-    // (submit/approve). Re-running the suite must start from clean numbers,
-    // so wipe the demo tenants' leave state and re-seed it back to baseline.
-    // Idempotency-visible mutations (submit/approve) also write their request
-    // to idempotency_keys. If a prior run already stored a key+response for
-    // these demo tenants, a fixed-key replay would return the cached body
-    // WITHOUT inserting a row — leaving every subsequent list empty. Wipe the
-    // demo keys here so each run starts idempotency-clean.
-    await q.exec(`DELETE FROM idempotency_keys WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    await q.exec(`DELETE FROM leave_requests WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    await q.exec(`DELETE FROM leave_balances WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    // Attendance records are created/destroyed by the same suite's clock-in/out
-    // flow; wipe them so re-runs start from a clean state.
-    await q.exec(`DELETE FROM attendance_records WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    // The ATS hire flow creates employees + auto-started onboarding plans
-    // (candidate → employee event). Wipe all child rows that FK to employees
-    // (plan tasks/snapshots, plans, candidates, then history/compensation)
-    // BEFORE purging the throwaway employees below, or the re-run fails on
-    // foreign-key violations.
-    await q.exec(`DELETE FROM onboarding_tasks WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    await q.exec(`DELETE FROM onboarding_plans WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    await q.exec(`DELETE FROM job_candidates WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    await q.exec(`DELETE FROM job_openings WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    // The HR suite creates+terminates throwaway employees (Zara, Temp Worker)
-    // with random ids; without wiping them, re-runs accumulate terminated rows
-    // and headcount/leave assertions drift. Keep only the canonical seed roster
-    // and drop the rest (FK-clean order: history/compensation first).
-    await q.exec(`DELETE FROM employment_history WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    await q.exec(`DELETE FROM compensation_records WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    await q.exec(`DELETE FROM employees WHERE tenant_id = ANY($1::uuid[]) AND id <> ALL($2::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-      [
-        SEED.EMP_ADMIN,
-        SEED.EMP_PRIYA,
-        SEED.EMP_AISHA,
-        SEED.EMP_MARCUS,
-        SEED.EMP_GLOBEX,
-      ],
-    ])
+    // Wipe everything the e2e suite mutates across the demo tenants, then
+    // re-seed the baseline below. Leave state is the thing the suite mutates
+    // most (submit/approve) — re-runs must start from clean balances. The
+    // idempotency-visible mutations also store keys+responses; wiping the demo
+    // keys stops a fixed-key replay from returning a cached body WITHOUT
+    // inserting a row.
+    // Issued as ONE multi-statement query: 14 sequential deletes were 14 pooler
+    // round trips, the same per-statement cost the permission insert used to
+    // pay before it was batched with unnest. Order is FK-safe (children before
+    // parents): plan tasks → plans → employees, candidates → openings, and
+    // every employee-referencing table before the employee purge. Kept
+    // employees are exempted so the seed roster survives.
+    await q.exec(
+      `DELETE FROM onboarding_tasks     WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM job_candidates       WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM leave_requests       WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM leave_balances       WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM attendance_records   WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM notifications        WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM usage_events         WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM subscriptions        WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM onboarding_plans     WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM job_openings         WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM employment_history   WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM compensation_records WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM employees            WHERE tenant_id = ANY(${DEMO_TENANTS}) AND id <> ALL(${KEPT_EMPLOYEES});
+       DELETE FROM idempotency_keys     WHERE tenant_id = ANY(${DEMO_TENANTS});`,
+    )
     // The ATS suite moves demo candidates between pipeline stages (screening→
     // interview, offer→hired, applied→rejected); restore the seeded baseline so
     // re-runs start from a clean pipeline.
@@ -481,6 +484,7 @@ export async function resetDemoLeaveState(db: Db): Promise<void> {
     await seedGlobex(q)
     await seedAts(q)
     await seedOnboarding(q)
+    await seedBilling(q)
   })
 }
 

@@ -11,6 +11,8 @@ import { canTransition, PIPELINE_STAGES, type Candidate, type JobOpening } from 
 import * as repo from './ats.repo.js'
 import * as employeesRepo from '../employees/employees.repo.js'
 import * as onboardingRepo from '../onboarding/onboarding.repo.js'
+import { notify } from '../notifications/notifications.repo.js'
+import { recordUsage } from '../billing/billing.repo.js'
 
 const jobCreateSchema = z.object({
   title: z.string().min(1).max(200),
@@ -167,6 +169,14 @@ async function hireCandidate(
 
   await repo.setCandidateHiredEmployee(q, candidate.id, employee.id)
 
+  await recordUsage(q, {
+    tenantId,
+    metric: 'seats',
+    quantity: 1,
+    entityType: 'employee',
+    entityId: employee.id,
+  })
+
   await audit(q, {
     tenantId,
     actorType: 'user',
@@ -177,6 +187,19 @@ async function hireCandidate(
     after: employee,
     ip,
   })
+
+  // Domain event: employee.hired → ping the hiring manager who opened the req.
+  if (opening.createdBy) {
+    await notify(q, {
+      tenantId,
+      recipientUserId: opening.createdBy,
+      type: 'employee.hired',
+      title: 'A candidate was hired',
+      body: `${candidate.firstName} ${candidate.lastName} was hired for ${opening.title}`,
+      entityType: 'employee',
+      entityId: employee.id,
+    })
+  }
 
   const template = await onboardingRepo.getDefaultTemplate(q, tenantId, 'onboarding')
   if (!template) return { employeeId: employee.id, onboardingPlanId: null }

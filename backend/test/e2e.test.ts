@@ -1126,4 +1126,358 @@ describe('onboarding / offboarding', () => {
     expect(plan.status).toBe('in_progress')
     expect(plan.templateName).toBe('New Hire Welcome')
   })
+
+  describe('phase2 modified-path domain events (regression)', () => {
+    it('leave decision → the requester is notified for approved and rejected', async () => {
+      const approvedSubmit = await app.inject({
+        method: 'POST',
+        url: '/leave-requests',
+        headers: { ...auth(aisha), 'idempotency-key': '00000000-0000-4000-8000-0000000000c1' },
+        payload: {
+          leaveTypeId: SEED.LEAVE_ANNUAL,
+          startDate: '2026-10-05',
+          endDate: '2026-10-06',
+          reason: 'Regression approve',
+        },
+      })
+      expect(approvedSubmit.statusCode).toBe(201)
+      const approvedRequest = approvedSubmit.json()
+
+      const approve = await app.inject({
+        method: 'POST',
+        url: `/leave-requests/${approvedRequest.id}/decision`,
+        headers: { ...auth(priya), 'idempotency-key': '00000000-0000-4000-8000-0000000000c2' },
+        payload: { decision: 'approved', decisionNote: 'Enjoy the break' },
+      })
+      expect(approve.statusCode).toBe(200)
+      expect(approve.json().status).toBe('approved')
+
+      const approvedNotes = await app.inject({
+        method: 'GET',
+        url: '/notifications?type=leave.approved',
+        headers: auth(aisha),
+      })
+      expect(approvedNotes.statusCode).toBe(200)
+      const approvedList = approvedNotes.json().data.filter(
+        (n: { entityId: string }) => n.entityId === approvedRequest.id,
+      )
+      expect(approvedList.length).toBe(1)
+      expect(approvedList[0].title).toBe('Leave request approved')
+      expect(approvedList[0].body).toContain('Enjoy the break')
+
+      const rejectedSubmit = await app.inject({
+        method: 'POST',
+        url: '/leave-requests',
+        headers: { ...auth(aisha), 'idempotency-key': '00000000-0000-4000-8000-0000000000c3' },
+        payload: {
+          leaveTypeId: SEED.LEAVE_ANNUAL,
+          startDate: '2026-10-12',
+          endDate: '2026-10-13',
+          reason: 'Regression reject',
+        },
+      })
+      expect(rejectedSubmit.statusCode).toBe(201)
+      const rejectedRequest = rejectedSubmit.json()
+
+      const reject = await app.inject({
+        method: 'POST',
+        url: `/leave-requests/${rejectedRequest.id}/decision`,
+        headers: { ...auth(priya), 'idempotency-key': '00000000-0000-4000-8000-0000000000c4' },
+        payload: { decision: 'rejected', decisionNote: 'Backfill needed then' },
+      })
+      expect(reject.statusCode).toBe(200)
+      expect(reject.json().status).toBe('rejected')
+
+      const rejectedNotes = await app.inject({
+        method: 'GET',
+        url: '/notifications?type=leave.rejected',
+        headers: auth(aisha),
+      })
+      const rejectedList = rejectedNotes.json().data.filter(
+        (n: { entityId: string }) => n.entityId === rejectedRequest.id,
+      )
+      expect(rejectedList.length).toBe(1)
+      expect(rejectedList[0].title).toBe('Leave request rejected')
+      expect(rejectedList[0].body).toContain('Backfill needed then')
+    })
+
+    it('hire → the opening creator is notified and one seat is metered', async () => {
+      const before = await app.inject({
+        method: 'GET',
+        url: '/billing/usage?metric=seats',
+        headers: auth(admin),
+      })
+      const seatsBefore =
+        (before.json().find((r: { metric: string }) => r.metric === 'seats')?.total as number) ?? 0
+
+      const opening = await app.inject({
+        method: 'POST',
+        url: '/job-openings',
+        headers: { ...auth(admin), 'Idempotency-Key': '00000000-0000-4000-8000-0000000000c5' },
+        payload: { title: 'Staff Engineer', employmentType: 'full_time' },
+      })
+      expect(opening.statusCode).toBe(201)
+      const job = opening.json()
+      expect(job.createdBy).toBeTruthy()
+
+      const candidate = await app.inject({
+        method: 'POST',
+        url: `/job-openings/${job.id}/candidates`,
+        headers: { ...auth(admin), 'Idempotency-Key': '00000000-0000-4000-8000-0000000000c6' },
+        payload: {
+          firstName: 'Priyanka',
+          lastName: 'Rao',
+          email: 'priyanka.rao@example.com',
+          source: 'referral',
+        },
+      })
+      expect(candidate.statusCode).toBe(201)
+      const cand = candidate.json()
+      expect(cand.stage).toBe('sourced')
+
+      for (const stage of ['applied', 'screening', 'interview', 'offer', 'hired']) {
+        const step = await app.inject({
+          method: 'POST',
+          url: `/candidates/${cand.id}/transition`,
+          headers: auth(admin),
+          payload: { stage },
+        })
+        expect(step.statusCode).toBe(200)
+      }
+      const hired = (await app.inject({ method: 'GET', url: `/candidates/${cand.id}`, headers: auth(admin) })).json()
+      expect(hired.hiredEmployeeId).toBeTruthy()
+      const hiredEmployeeId = hired.hiredEmployeeId as string
+
+      const hiredNotes = await app.inject({
+        method: 'GET',
+        url: '/notifications?type=employee.hired',
+        headers: auth(admin),
+      })
+      const hiredList = hiredNotes.json().data.filter((n: { entityId: string }) => n.entityId === hiredEmployeeId)
+      expect(hiredList.length).toBe(1)
+      expect(hiredList[0].title).toBe('A candidate was hired')
+      expect(hiredList[0].body).toContain('Priyanka Rao')
+
+      const after = await app.inject({
+        method: 'GET',
+        url: '/billing/usage?metric=seats',
+        headers: auth(admin),
+      })
+      const seatsAfter =
+        (after.json().find((r: { metric: string }) => r.metric === 'seats')?.total as number) ?? 0
+      expect(seatsAfter).toBe(seatsBefore + 1)
+
+      const employee = await app.inject({
+        method: 'GET',
+        url: `/employees/${hiredEmployeeId}`,
+        headers: auth(admin),
+      })
+      expect(employee.json().employmentStatus).toBe('active')
+    })
+
+    it('onboarding plan start/complete → employee notified and plan metered', async () => {
+      const before = await app.inject({
+        method: 'GET',
+        url: '/billing/usage?metric=onboarding_plans',
+        headers: auth(admin),
+      })
+      const plansBefore =
+        (before.json().find((r: { metric: string }) => r.metric === 'onboarding_plans')?.total as number) ?? 0
+
+      const started = await app.inject({
+        method: 'POST',
+        url: '/onboarding/plans',
+        headers: { ...auth(admin), 'Idempotency-Key': '00000000-0000-4000-8000-0000000000c7' },
+        payload: { employeeId: SEED.EMP_PRIYA, templateId: SEED.ONB_TEMPLATE_HIRE },
+      })
+      expect(started.statusCode).toBe(201)
+      const plan = started.json()
+      expect(plan.kind).toBe('onboarding')
+      expect(plan.source).toBe('manual')
+      expect(plan.status).toBe('in_progress')
+
+      const startedNotes = await app.inject({
+        method: 'GET',
+        url: '/notifications?type=onboarding.onboarding_started',
+        headers: auth(priya),
+      })
+      const startedList = startedNotes.json().data.filter((n: { entityId: string }) => n.entityId === plan.id)
+      expect(startedList.length).toBe(1)
+      expect(startedList[0].title).toBe('Onboarding plan started')
+      expect(startedList[0].body).toContain('New Hire Welcome')
+
+      const afterStart = await app.inject({
+        method: 'GET',
+        url: '/billing/usage?metric=onboarding_plans',
+        headers: auth(admin),
+      })
+      const plansAfter =
+        (afterStart.json().find((r: { metric: string }) => r.metric === 'onboarding_plans')?.total as number) ?? 0
+      expect(plansAfter).toBe(plansBefore + 1)
+
+      const tasks = plan.tasks as { id: string }[]
+      let lastPatch: { statusCode: number; json: () => { status?: string } }
+      for (const task of tasks) {
+        lastPatch = await app.inject({
+          method: 'PATCH',
+          url: `/onboarding/plans/${plan.id}/tasks/${task.id}`,
+          headers: auth(admin),
+          payload: { status: 'completed', notes: 'Regression' },
+        })
+        expect(lastPatch.statusCode).toBe(200)
+      }
+      expect(lastPatch!.json().status).toBe('completed')
+
+      const completedNotes = await app.inject({
+        method: 'GET',
+        url: '/notifications?type=onboarding.onboarding_completed',
+        headers: auth(priya),
+      })
+      const completedList = completedNotes.json().data.filter((n: { entityId: string }) => n.entityId === plan.id)
+      expect(completedList.length).toBe(1)
+      expect(completedList[0].title).toBe('Onboarding plan complete')
+    })
+  })
+
+  describe('notifications & billing (new coverage)', () => {
+    it('billing: subscription reads expose plan/seatLimit/seatsUsed and stay tenant-pure', async () => {
+      const acme = await app.inject({ method: 'GET', url: '/billing/subscription', headers: auth(admin) })
+      expect(acme.statusCode).toBe(200)
+      expect(acme.json().plan).toBe('grow')
+      expect(acme.json().seatLimit).toBe(100)
+      expect(acme.json().seatsUsed).toBeGreaterThanOrEqual(4)
+
+      const globex = await app.inject({ method: 'GET', url: '/billing/subscription', headers: auth(globexAdmin) })
+      expect(globex.statusCode).toBe(200)
+      expect(globex.json().plan).toBe('core')
+      expect(globex.json().seatLimit).toBe(25)
+
+      const denied = await app.inject({ method: 'GET', url: '/billing/subscription', headers: auth(aisha) })
+      expect(denied.statusCode).toBe(403)
+    })
+
+    it('billing: plan change rolls a fresh period, audits it, and gates on BILLING_WRITE', async () => {
+      const denied = await app.inject({
+        method: 'PATCH',
+        url: '/billing/subscription/plan',
+        headers: auth(aisha),
+        payload: { plan: 'grow' },
+      })
+      expect(denied.statusCode).toBe(403)
+
+      const up = await app.inject({
+        method: 'PATCH',
+        url: '/billing/subscription/plan',
+        headers: auth(globexAdmin),
+        payload: { plan: 'grow' },
+      })
+      expect(up.statusCode).toBe(200)
+      expect(up.json().plan).toBe('grow')
+      expect(up.json().seatLimit).toBe(100)
+      expect(up.json().currentPeriodStart).toBeTruthy()
+
+      const back = await app.inject({
+        method: 'PATCH',
+        url: '/billing/subscription/plan',
+        headers: auth(globexAdmin),
+        payload: { plan: 'core' },
+      })
+      expect(back.statusCode).toBe(200)
+      expect(back.json().plan).toBe('core')
+      expect(back.json().seatLimit).toBe(25)
+
+      const auditRes = await app.inject({ method: 'GET', url: '/audit-logs', headers: auth(globexAdmin) })
+      const planChanges = auditRes.json().data.filter((e: { action: string }) => e.action === 'billing.plan_changed')
+      expect(planChanges.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('billing: usage endpoint rejects inverted dates and filters by metric', async () => {
+      const inverted = await app.inject({
+        method: 'GET',
+        url: '/billing/usage?from=2026-09-20&to=2026-09-01',
+        headers: auth(admin),
+      })
+      expect(inverted.statusCode).toBe(400)
+
+      const seats = await app.inject({ method: 'GET', url: '/billing/usage?metric=seats', headers: auth(admin) })
+      expect(seats.statusCode).toBe(200)
+      const rows = seats.json() as { metric: string; total: number }[]
+      expect(rows.length).toBeGreaterThan(0)
+      expect(rows.every((r) => r.metric === 'seats')).toBe(true)
+      expect(typeof rows[0]!.total).toBe('number')
+
+      const all = await app.inject({ method: 'GET', url: '/billing/usage', headers: auth(admin) })
+      expect(all.statusCode).toBe(200)
+      expect(Array.isArray(all.json())).toBe(true)
+    })
+
+    it('notifications: list/unread-count/read/read-all are receiver-scoped', async () => {
+      const unreadBefore = await app.inject({
+        method: 'GET',
+        url: '/notifications/unread-count',
+        headers: auth(aisha),
+      })
+      expect(unreadBefore.statusCode).toBe(200)
+      const unreadBeforeCount = unreadBefore.json() as number
+      expect(unreadBeforeCount).toBeGreaterThanOrEqual(1)
+
+      const list = await app.inject({ method: 'GET', url: '/notifications', headers: auth(aisha) })
+      expect(list.statusCode).toBe(200)
+      const first = list.json().data[0] as { id: string; isRead: boolean }
+      expect(first).toBeTruthy()
+
+      const markOne = await app.inject({
+        method: 'PATCH',
+        url: `/notifications/${first.id}/read`,
+        headers: auth(aisha),
+      })
+      expect(markOne.statusCode).toBe(200)
+      expect(markOne.json().id).toBe(first.id)
+
+      const unreadAfter = await app.inject({
+        method: 'GET',
+        url: '/notifications/unread-count',
+        headers: auth(aisha),
+      })
+      expect((unreadAfter.json() as number)).toBe(unreadBeforeCount - 1)
+
+      const foreignRandom = '00000000-0000-4000-8000-ffffffffffff'
+      const foreignPatch = await app.inject({
+        method: 'PATCH',
+        url: `/notifications/${foreignRandom}/read`,
+        headers: auth(aisha),
+      })
+      expect(foreignPatch.statusCode).toBe(404)
+
+      // Admin-only employee.hired notifications must stay invisible to Aisha.
+      const invisible = await app.inject({
+        method: 'GET',
+        url: '/notifications?type=employee.hired',
+        headers: auth(aisha),
+      })
+      expect(invisible.json().total).toBe(0)
+
+      const unreadOnly = await app.inject({
+        method: 'GET',
+        url: '/notifications?unread=true',
+        headers: auth(aisha),
+      })
+      expect(unreadOnly.json().data.every((n: { isRead: boolean }) => n.isRead === false)).toBe(true)
+
+      const readAll = await app.inject({
+        method: 'POST',
+        url: '/notifications/read-all',
+        headers: auth(aisha),
+      })
+      expect(readAll.statusCode).toBe(200)
+      expect(typeof readAll.json().updated).toBe('number')
+
+      const unreadFinal = await app.inject({
+        method: 'GET',
+        url: '/notifications/unread-count',
+        headers: auth(aisha),
+      })
+      expect(unreadFinal.json()).toBe(0)
+    })
+  })
 })

@@ -15,6 +15,7 @@ export interface JobOpening {
   requirements: string | null
   headcount: number
   status: string
+  createdBy: string | null
   createdAt: string
   updatedAt: string
 }
@@ -28,7 +29,7 @@ const JOB_COLS = `
   j.employment_type AS "employmentType",
   j.salary_min::text AS "salaryMin", j.salary_max::text AS "salaryMax", j.currency,
   j.description, j.requirements, j.headcount,
-  j.status, j.created_at::text AS "createdAt", j.updated_at::text AS "updatedAt"`
+  j.status, j.created_by AS "createdBy", j.created_at::text AS "createdAt", j.updated_at::text AS "updatedAt"`
 
 const JOB_JOIN = `
   LEFT JOIN departments d ON d.id = j.department_id

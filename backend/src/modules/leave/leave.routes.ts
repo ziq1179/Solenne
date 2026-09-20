@@ -6,6 +6,7 @@ import { useIdempotency } from '../../lib/idempotency.js'
 import { audit } from '../../lib/audit.js'
 import { PERMISSIONS } from '../permissions.js'
 import * as repo from './leave.repo.js'
+import { notify, managerUserAccountId, userAccountIdForEmployee } from '../notifications/notifications.repo.js'
 
 const leaveRequestSchema = z.object({
   leaveTypeId: z.string().uuid(),
@@ -134,6 +135,20 @@ export function registerLeaveRoutes(fastify: FastifyInstance): void {
             after: request,
             ip: req.ip,
           })
+
+          // Domain event: leave.requested → ping the approving manager.
+          const managerUserId = await managerUserAccountId(q, req.ctx.employeeId!)
+          if (managerUserId) {
+            await notify(q, {
+              tenantId,
+              recipientUserId: managerUserId,
+              type: 'leave.requested',
+              title: 'Leave request needs approval',
+              body: `${leaveType.name} · ${days} day(s) from ${startDate} to ${endDate}${reason ? ` — ${reason}` : ''}`,
+              entityType: 'leave_request',
+              entityId: request.id,
+            })
+          }
           return { status: 201, body: request }
         }),
       )
@@ -191,6 +206,20 @@ export function registerLeaveRoutes(fastify: FastifyInstance): void {
             after: request,
             ip: req.ip,
           })
+
+          // Domain event: leave.approved/rejected → ping the requester.
+          const requesterUserId = await userAccountIdForEmployee(q, request.employeeId)
+          if (requesterUserId) {
+            await notify(q, {
+              tenantId,
+              recipientUserId: requesterUserId,
+              type: request.status === 'approved' ? 'leave.approved' : 'leave.rejected',
+              title: request.status === 'approved' ? 'Leave request approved' : 'Leave request rejected',
+              body: `${request.startDate} to ${request.endDate}${parsed.data.decisionNote ? ` — ${parsed.data.decisionNote}` : ''}`,
+              entityType: 'leave_request',
+              entityId: requestId,
+            })
+          }
           return { status: 200, body: request }
         }),
       )

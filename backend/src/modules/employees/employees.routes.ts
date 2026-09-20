@@ -4,9 +4,10 @@ import { authenticate, requirePermission } from '../../http/auth.js'
 import { httpError } from '../../http/errors.js'
 import { useIdempotency } from '../../lib/idempotency.js'
 import { audit } from '../../lib/audit.js'
-import { PERMISSIONS } from '../permissions.js'
-import * as repo from './employees.repo.js'
 import { newId } from '../../db/index.js'
+import { PERMISSIONS } from '../permissions.js'
+import { recordUsage } from '../billing/billing.repo.js'
+import * as repo from './employees.repo.js'
 
 const employeeCreateSchema = z.object({
   firstName: z.string().min(1).max(120),
@@ -129,6 +130,13 @@ export function registerEmployeeRoutes(fastify: FastifyInstance): void {
             after: toResponse(employee),
             ip: req.ip,
           })
+          await recordUsage(q, {
+            tenantId,
+            metric: 'seats',
+            quantity: 1,
+            entityType: 'employee',
+            entityId: id,
+          })
           return { status: 201, body: toResponse(employee) }
         }),
       )
@@ -243,6 +251,13 @@ export function registerEmployeeRoutes(fastify: FastifyInstance): void {
           before: toResponse(before),
           after: toResponse(terminated),
           ip: req.ip,
+        })
+        await recordUsage(q, {
+          tenantId,
+          metric: 'seats',
+          quantity: -1,
+          entityType: 'employee',
+          entityId: employeeId,
         })
       })
       return reply.code(204).send()

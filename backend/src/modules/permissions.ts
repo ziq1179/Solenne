@@ -12,6 +12,9 @@ export const PERMISSIONS = {
   ATS_APPROVE: 'ats:approve',
   ONBOARDING_READ: 'onboarding:read',
   ONBOARDING_WRITE: 'onboarding:write',
+  NOTIFICATIONS_READ: 'notifications:read',
+  BILLING_READ: 'billing:read',
+  BILLING_WRITE: 'billing:write',
 } as const
 
 export const PERMISSION_CODES = Object.values(PERMISSIONS)
@@ -36,6 +39,9 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.ATS_APPROVE,
       PERMISSIONS.ONBOARDING_READ,
       PERMISSIONS.ONBOARDING_WRITE,
+      PERMISSIONS.NOTIFICATIONS_READ,
+      PERMISSIONS.BILLING_READ,
+      PERMISSIONS.BILLING_WRITE,
     ],
   },
   hr_manager: {
@@ -51,6 +57,8 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.ATS_READ,
       PERMISSIONS.ATS_WRITE,
       PERMISSIONS.ATS_APPROVE,
+      PERMISSIONS.NOTIFICATIONS_READ,
+      PERMISSIONS.BILLING_READ,
     ],
   },
   manager: {
@@ -64,6 +72,7 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.ATS_READ,
       PERMISSIONS.ATS_WRITE,
       PERMISSIONS.ONBOARDING_READ,
+      PERMISSIONS.NOTIFICATIONS_READ,
     ],
   },
   employee: {
@@ -72,6 +81,7 @@ export const SYSTEM_ROLES: Record<
       PERMISSIONS.EMPLOYEE_READ,
       PERMISSIONS.LEAVE_READ,
       PERMISSIONS.ATTENDANCE_READ,
+      PERMISSIONS.NOTIFICATIONS_READ,
     ],
   },
 }
