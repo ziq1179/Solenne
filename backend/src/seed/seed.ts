@@ -39,6 +39,10 @@ export const SEED = {
   CAND_LENA: '9c000000-0000-4000-8000-000000000001',
   CAND_RYO: '9c000000-0000-4000-8000-000000000002',
   CAND_OFFER: '9c000000-0000-4000-8000-000000000003',
+
+  // Phase 2 — Onboarding/Offboarding templates (Acme).
+  ONB_TEMPLATE_HIRE: '2b000000-0000-4000-8000-000000000001',
+  ONB_TEMPLATE_EXIT: '2b000000-0000-4000-8000-000000000002',
 } as const
 
 interface SeedUser {
@@ -171,6 +175,49 @@ async function seedAts(q: Q): Promise<void> {
       SEED.JOB_DESIGNER,
       SEED.CAND_RYO,
       SEED.CAND_OFFER,
+    ],
+  )
+}
+
+async function seedOnboarding(q: Q): Promise<void> {
+  // Default onboarding + offboarding checklists for Acme, so the ATS hire flow
+  // auto-starts plans out of the box and HR has an exit template to copy.
+  await q.exec(
+    `INSERT INTO onboarding_templates
+       (id, tenant_id, name, kind, description, is_default, is_active)
+     VALUES
+       ($1, $2, 'New Hire Welcome', 'onboarding',
+        'Standard first-week checklist for every new starter.', true, true),
+       ($3, $2, 'Offboarding Checklist', 'offboarding',
+        'Standard exit checklist: assets, access, interview and settlement.', true, true)
+     ON CONFLICT (id) DO NOTHING`,
+    [SEED.ONB_TEMPLATE_HIRE, SEED.TENANT_ACME, SEED.ONB_TEMPLATE_EXIT],
+  )
+  await q.exec(
+    `INSERT INTO onboarding_template_tasks
+       (id, tenant_id, template_id, name, category, position, optional)
+     VALUES
+       ($1, $10, $9, 'Provision laptop + accounts', 'it_provisioning', 0, false),
+       ($2, $10, $9, 'Complete HR paperwork', 'paperwork', 1, false),
+       ($3, $10, $9, 'Compliance training', 'training', 2, false),
+       ($4, $10, $9, 'Team introductions', 'training', 3, true),
+       ($5, $10, $11, 'Return company assets', 'asset', 0, false),
+       ($6, $10, $11, 'Revoke system access', 'access', 1, false),
+       ($7, $10, $11, 'Exit interview', 'exit_interview', 2, true),
+       ($8, $10, $11, 'Final settlement hand-off', 'settlement', 3, false)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      '2b000000-0000-4000-8000-000000000003',
+      '2b000000-0000-4000-8000-000000000004',
+      '2b000000-0000-4000-8000-000000000005',
+      '2b000000-0000-4000-8000-000000000006',
+      '2b000000-0000-4000-8000-000000000007',
+      '2b000000-0000-4000-8000-000000000008',
+      '2b000000-0000-4000-8000-000000000009',
+      '2b000000-0000-4000-8000-00000000000a',
+      SEED.ONB_TEMPLATE_HIRE,
+      SEED.TENANT_ACME,
+      SEED.ONB_TEMPLATE_EXIT,
     ],
   )
 }
@@ -331,6 +378,7 @@ async function seedAll(db: Db): Promise<void> {
     await seedAcme(q)
     await seedGlobex(q)
     await seedAts(q)
+    await seedOnboarding(q)
   })
 }
 
@@ -341,8 +389,10 @@ async function seedAll(db: Db): Promise<void> {
 export async function seedDatabase(db: Db): Promise<void> {
   await db.system(async (q) => {
     // Phase 2 demo data is seeded before the Phase 0/1 fast path: an already
-    // populated database (e.g. production) still picks up the ATS sample jobs.
+    // populated database (e.g. production) still picks up the ATS sample jobs
+    // and the default onboarding/offboarding checklists.
     await seedAts(q)
+    await seedOnboarding(q)
     // Fast path: neon-pooler round trips are slow; skip once fully seeded.
     const existing = await q.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM employees WHERE tenant_id = ANY($1::uuid[])`,
@@ -387,6 +437,23 @@ export async function resetDemoLeaveState(db: Db): Promise<void> {
     await q.exec(`DELETE FROM attendance_records WHERE tenant_id = ANY($1::uuid[])`, [
       [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
     ])
+    // The ATS hire flow creates employees + auto-started onboarding plans
+    // (candidate → employee event). Wipe all child rows that FK to employees
+    // (plan tasks/snapshots, plans, candidates, then history/compensation)
+    // BEFORE purging the throwaway employees below, or the re-run fails on
+    // foreign-key violations.
+    await q.exec(`DELETE FROM onboarding_tasks WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
+    await q.exec(`DELETE FROM onboarding_plans WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
+    await q.exec(`DELETE FROM job_candidates WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
+    await q.exec(`DELETE FROM job_openings WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
     // The HR suite creates+terminates throwaway employees (Zara, Temp Worker)
     // with random ids; without wiping them, re-runs accumulate terminated rows
     // and headcount/leave assertions drift. Keep only the canonical seed roster
@@ -410,15 +477,10 @@ export async function resetDemoLeaveState(db: Db): Promise<void> {
     // The ATS suite moves demo candidates between pipeline stages (screening→
     // interview, offer→hired, applied→rejected); restore the seeded baseline so
     // re-runs start from a clean pipeline.
-    await q.exec(`DELETE FROM job_candidates WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
-    await q.exec(`DELETE FROM job_openings WHERE tenant_id = ANY($1::uuid[])`, [
-      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
-    ])
     await seedAcme(q)
     await seedGlobex(q)
     await seedAts(q)
+    await seedOnboarding(q)
   })
 }
 

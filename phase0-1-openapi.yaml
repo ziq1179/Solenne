@@ -336,6 +336,154 @@ components:
         rating: { type: integer, nullable: true }
         notes: { type: string, nullable: true }
 
+    OnboardingTemplate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [onboarding, offboarding] }
+        description: { type: string, nullable: true }
+        isDefault: { type: boolean }
+        isActive: { type: boolean }
+        taskCount: { type: integer }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    OnboardingTemplateTask:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        category:
+          type: string
+          enum: [it_provisioning, paperwork, training, access, asset, exit_interview, settlement, general]
+        position: { type: integer }
+        optional: { type: boolean }
+
+    OnboardingTemplateDetail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [onboarding, offboarding] }
+        description: { type: string, nullable: true }
+        isDefault: { type: boolean }
+        isActive: { type: boolean }
+        taskCount: { type: integer }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/OnboardingTemplateTask" }
+
+    OnboardingTemplateInput:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [onboarding, offboarding] }
+        description: { type: string, nullable: true }
+        isDefault: { type: boolean, default: false }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/OnboardingTemplateTaskInput" }
+
+    OnboardingTemplateTaskInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        category:
+          type: string
+          enum: [it_provisioning, paperwork, training, access, asset, exit_interview, settlement, general]
+          default: general
+        position: { type: integer, default: 0 }
+        optional: { type: boolean, default: false }
+
+    OnboardingTemplatePatch:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [onboarding, offboarding] }
+        description: { type: string, nullable: true }
+        isDefault: { type: boolean }
+        isActive: { type: boolean }
+
+    OnboardingPlan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        employeeName: { type: string, nullable: true }
+        kind: { type: string, enum: [onboarding, offboarding] }
+        templateId: { type: string, format: uuid }
+        templateName: { type: string }
+        status: { type: string, enum: [in_progress, completed, cancelled] }
+        source: { type: string, enum: [manual, system] }
+        startedAt: { type: string }
+        completedAt: { type: string, nullable: true }
+        totalTasks: { type: integer }
+        completedTasks: { type: integer }
+        progressPercent: { type: integer }
+
+    OnboardingPlanTask:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        category:
+          type: string
+          enum: [it_provisioning, paperwork, training, access, asset, exit_interview, settlement, general]
+        position: { type: integer }
+        optional: { type: boolean }
+        status: { type: string, enum: [pending, in_progress, completed, skipped] }
+        notes: { type: string, nullable: true }
+        completedBy: { type: string, format: uuid, nullable: true }
+        completedAt: { type: string, nullable: true }
+
+    OnboardingPlanDetail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employeeId: { type: string, format: uuid }
+        employeeName: { type: string, nullable: true }
+        kind: { type: string, enum: [onboarding, offboarding] }
+        templateId: { type: string, format: uuid }
+        templateName: { type: string }
+        status: { type: string, enum: [in_progress, completed, cancelled] }
+        source: { type: string, enum: [manual, system] }
+        startedAt: { type: string }
+        completedAt: { type: string, nullable: true }
+        totalTasks: { type: integer }
+        completedTasks: { type: integer }
+        progressPercent: { type: integer }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/OnboardingPlanTask" }
+
+    OnboardingPlanCreate:
+      type: object
+      required: [employeeId, templateId]
+      properties:
+        employeeId: { type: string, format: uuid }
+        templateId: { type: string, format: uuid }
+
+    OnboardingPlanTaskStatus:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [pending, in_progress, completed, skipped] }
+        notes: { type: string, nullable: true }
+
+    OnboardingPlanTaskUpdate:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/OnboardingPlanDetail"
+        - type: object
+          required: [task]
+          properties:
+            task: { $ref: "#/components/schemas/OnboardingPlanTask" }
+
 paths:
   /tenants/signup:
     post:
@@ -1067,3 +1215,273 @@ paths:
           description: Transition not allowed
         "404":
           description: Not found
+
+  /onboarding/templates:
+    get:
+      summary: List onboarding/offboarding templates (requires onboarding:read)
+      parameters:
+        - name: kind
+          in: query
+          schema: { type: string, enum: [onboarding, offboarding] }
+        - name: defaultOnly
+          in: query
+          schema: { type: boolean }
+        - name: includeInactive
+          in: query
+          schema: { type: boolean }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paged templates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/OnboardingTemplate" }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  total: { type: integer }
+    post:
+      summary: Create a template with its checklist (requires onboarding:write)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardingTemplateInput" }
+      responses:
+        "201":
+          description: Created template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingTemplateDetail" }
+        "400":
+          description: Invalid payload
+        "403":
+          description: Missing onboarding:write
+
+  /onboarding/templates/{templateId}:
+    parameters:
+      - name: templateId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Fetch a template with its tasks (requires onboarding:read)
+      responses:
+        "200":
+          description: The template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingTemplateDetail" }
+        "404":
+          description: Not found or outside this tenant
+    patch:
+      summary: Update template fields (requires onboarding:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardingTemplatePatch" }
+      responses:
+        "200":
+          description: Updated template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingTemplateDetail" }
+        "404":
+          description: Not found
+    delete:
+      summary: Soft-delete a template (requires onboarding:write)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /onboarding/templates/{templateId}/tasks:
+    parameters:
+      - name: templateId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      summary: Append a task to a template (requires onboarding:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardingTemplateTaskInput" }
+      responses:
+        "201":
+          description: Added task
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingTemplateTask" }
+        "404":
+          description: Template not found
+
+  /onboarding/templates/{templateId}/tasks/{taskId}:
+    parameters:
+      - name: templateId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: taskId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      summary: Update a template task (requires onboarding:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                category:
+                  type: string
+                  enum: [it_provisioning, paperwork, training, access, asset, exit_interview, settlement, general]
+                position: { type: integer }
+                optional: { type: boolean }
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingTemplateTask" }
+        "404":
+          description: Template or task not found
+    delete:
+      summary: Remove a task from a template (requires onboarding:write)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Template not found
+
+  /onboarding/plans:
+    get:
+      summary: List onboarding/offboarding plans (requires onboarding:read)
+      parameters:
+        - name: kind
+          in: query
+          schema: { type: string, enum: [onboarding, offboarding] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [in_progress, completed, cancelled] }
+        - name: employeeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paged plans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/OnboardingPlan" }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  total: { type: integer }
+    post:
+      summary: Start a plan for an employee from a template snapshot (requires onboarding:write)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardingPlanCreate" }
+      responses:
+        "201":
+          description: Created plan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingPlanDetail" }
+        "404":
+          description: Employee or template not found
+
+  /onboarding/plans/{planId}:
+    parameters:
+      - name: planId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Fetch a plan with its snapshot tasks (requires onboarding:read)
+      responses:
+        "200":
+          description: The plan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingPlanDetail" }
+        "404":
+          description: Not found or outside this tenant
+
+  /onboarding/plans/{planId}/tasks/{taskId}:
+    parameters:
+      - name: planId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: taskId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      summary: Update a plan task's status; a plan auto-completes when all tasks are terminal (requires onboarding:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardingPlanTaskStatus" }
+      responses:
+        "200":
+          description: Updated task (with the re-fetched plan alongside)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingPlanTaskUpdate" }
+        "404":
+          description: Plan or task not found
+        "409":
+          description: Plan is completed/cancelled and no longer accepts task changes
+
+  /onboarding/plans/{planId}/cancel:
+    parameters:
+      - name: planId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      summary: Cancel an in-progress plan (requires onboarding:write)
+      responses:
+        "200":
+          description: Cancelled plan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingPlanDetail" }
+        "404":
+          description: Not found
+        "409":
+          description: Plan is completed/cancelled and cannot be cancelled again

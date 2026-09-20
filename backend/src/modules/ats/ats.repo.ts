@@ -302,6 +302,12 @@ export async function updateCandidateStage(q: Q, id: string, stage: string): Pro
   return getCandidate(q, id)
 }
 
+/** Links a hired candidate to the employee record created for them. */
+export async function setCandidateHiredEmployee(q: Q, id: string, employeeId: string): Promise<Candidate | null> {
+  await q.exec(`UPDATE job_candidates SET hired_employee_id = $2, updated_at = now() WHERE id = $1`, [id, employeeId])
+  return getCandidate(q, id)
+}
+
 export async function softDeleteCandidate(q: Q, id: string): Promise<void> {
   await q.exec(`UPDATE job_candidates SET deleted_at = now(), updated_at = now() WHERE id = $1`, [id])
 }

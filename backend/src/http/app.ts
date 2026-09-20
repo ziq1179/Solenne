@@ -7,6 +7,7 @@ import { registerErrorHandler } from './errors.js'
 import { registerAuthRoutes } from '../modules/auth/auth.routes.js'
 import { registerTenantRoutes } from '../modules/tenants/tenants.routes.js'
 import { registerAtsRoutes } from '../modules/ats/ats.routes.js'
+import { registerOnboardingRoutes } from '../modules/onboarding/onboarding.routes.js'
 import { registerEmployeeRoutes } from '../modules/employees/employees.routes.js'
 import { registerLeaveRoutes } from '../modules/leave/leave.routes.js'
 import { registerAttendanceRoutes } from '../modules/attendance/attendance.routes.js'
@@ -96,6 +97,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   registerAuthRoutes(fastify)
   registerTenantRoutes(fastify)
   registerAtsRoutes(fastify)
+  registerOnboardingRoutes(fastify)
   registerEmployeeRoutes(fastify)
   registerLeaveRoutes(fastify)
   registerAttendanceRoutes(fastify)

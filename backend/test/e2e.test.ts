@@ -835,3 +835,295 @@ describe('recruiting (ats)', () => {
     expect(fetchGone.statusCode).toBe(404)
   })
 })
+
+describe('onboarding / offboarding', () => {
+  it('lists seeded templates; gates reads/writes by role', async () => {
+    const list = await app.inject({ method: 'GET', url: '/onboarding/templates', headers: auth(admin) })
+    expect(list.statusCode).toBe(200)
+    const body = list.json()
+    expect(body.total).toBe(2)
+    const hire = body.data.find((t: { id: string }) => t.id === SEED.ONB_TEMPLATE_HIRE)
+    expect(hire.name).toBe('New Hire Welcome')
+    expect(hire.isDefault).toBe(true)
+    expect(hire.taskCount).toBe(4)
+    const exit = body.data.find((t: { id: string }) => t.id === SEED.ONB_TEMPLATE_EXIT)
+    expect(exit.kind).toBe('offboarding')
+    expect(exit.isDefault).toBe(true)
+
+    const employeeDenied = await app.inject({ method: 'GET', url: '/onboarding/templates', headers: auth(aisha) })
+    expect(employeeDenied.statusCode).toBe(403)
+
+    const managerRead = await app.inject({ method: 'GET', url: '/onboarding/templates', headers: auth(priya) })
+    expect(managerRead.statusCode).toBe(200)
+
+    const managerWriteDenied = await app.inject({
+      method: 'POST',
+      url: '/onboarding/templates',
+      headers: auth(priya),
+      payload: { name: 'Nope', kind: 'onboarding' },
+    })
+    expect(managerWriteDenied.statusCode).toBe(403)
+  })
+
+  it('creates, edits, and soft-deletes a template with tasks', async () => {
+    const key = '00000000-0000-4000-8000-0000000000bd'
+    const created = await app.inject({
+      method: 'POST',
+      url: '/onboarding/templates',
+      headers: { ...auth(admin), 'Idempotency-Key': key },
+      payload: {
+        name: 'Contractor Onboarding',
+        kind: 'onboarding',
+        description: 'Lite checklist for contractors.',
+        tasks: [
+          { name: 'Create accounts', category: 'it_provisioning', position: 0 },
+          { name: 'Sign contractor agreement', category: 'paperwork', position: 1 },
+        ],
+      },
+    })
+    expect(created.statusCode).toBe(201)
+    const template = created.json()
+    expect(template.taskCount).toBe(2)
+    expect(template.tasks).toHaveLength(2)
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/onboarding/templates/${template.id}`,
+      headers: auth(admin),
+    })
+    expect(detail.statusCode).toBe(200)
+    expect(detail.json().tasks.map((t: { name: string }) => t.name)).toEqual([
+      'Create accounts',
+      'Sign contractor agreement',
+    ])
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/onboarding/templates/${template.id}`,
+      headers: auth(admin),
+      payload: { description: 'Updated description', isDefault: true },
+    })
+    expect(patched.statusCode).toBe(200)
+    expect(patched.json().isDefault).toBe(true)
+
+    const firstTask = detail.json().tasks[0]
+    const added = await app.inject({
+      method: 'POST',
+      url: `/onboarding/templates/${template.id}/tasks`,
+      headers: auth(admin),
+      payload: { name: 'Issue badge', category: 'access', position: 2 },
+    })
+    expect(added.statusCode).toBe(201)
+    const taskId = added.json().id
+
+    const taskPatched = await app.inject({
+      method: 'PATCH',
+      url: `/onboarding/templates/${template.id}/tasks/${taskId}`,
+      headers: auth(admin),
+      payload: { optional: true },
+    })
+    expect(taskPatched.statusCode).toBe(200)
+    expect(taskPatched.json().optional).toBe(true)
+
+    const removed = await app.inject({
+      method: 'DELETE',
+      url: `/onboarding/templates/${template.id}/tasks/${firstTask.id}`,
+      headers: auth(admin),
+    })
+    expect(removed.statusCode).toBe(204)
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/onboarding/templates/${template.id}`,
+      headers: auth(admin),
+    })
+    expect(deleted.statusCode).toBe(204)
+    const fetchGone = await app.inject({
+      method: 'GET',
+      url: `/onboarding/templates/${template.id}`,
+      headers: auth(admin),
+    })
+    expect(fetchGone.statusCode).toBe(404)
+  })
+
+  it('starts a plan from the default template and auto-completes when all tasks are terminal', async () => {
+    const key = '00000000-0000-4000-8000-0000000000be'
+    const started = await app.inject({
+      method: 'POST',
+      url: '/onboarding/plans',
+      headers: { ...auth(admin), 'Idempotency-Key': key },
+      payload: { employeeId: SEED.EMP_MARCUS, templateId: SEED.ONB_TEMPLATE_HIRE },
+    })
+    expect(started.statusCode).toBe(201)
+    const plan = started.json()
+    expect(plan.status).toBe('in_progress')
+    expect(plan.kind).toBe('onboarding')
+    expect(plan.source).toBe('manual')
+    expect(plan.totalTasks).toBe(4)
+    expect(plan.progressPercent).toBe(0)
+    expect(plan.tasks.every((t: { status: string }) => t.status === 'pending')).toBe(true)
+
+    // Completing every task in sequence: the final patch auto-completes the plan.
+    const tasks = plan.tasks as { id: string }[]
+    let lastPatch: { statusCode: number; json: () => Record<string, unknown> & { task: Record<string, unknown>; plan?: Record<string, unknown> } }
+    for (const task of tasks) {
+      lastPatch = await app.inject({
+        method: 'PATCH',
+        url: `/onboarding/plans/${plan.id}/tasks/${task.id}`,
+        headers: auth(admin),
+        payload: { status: 'completed', notes: 'Done' },
+      })
+      expect(lastPatch.statusCode).toBe(200)
+      expect(lastPatch.json().task.status).toBe('completed')
+      expect(lastPatch.json().task.completedBy).toBeTruthy()
+      expect(lastPatch.json().task.completedAt).toBeTruthy()
+    }
+    // The PATCH response flattens the plan alongside the updated task.
+    expect(lastPatch!.json().status).toBe('completed')
+
+    const completed = await app.inject({
+      method: 'GET',
+      url: `/onboarding/plans/${plan.id}`,
+      headers: auth(admin),
+    })
+    expect(completed.statusCode).toBe(200)
+    expect(completed.json().status).toBe('completed')
+    expect(completed.json().progressPercent).toBe(100)
+  })
+
+  it('rejects task edits and cancellation once a plan is completed or cancelled', async () => {
+    // Reopen from a template, complete a single task, then cancel the plan.
+    const key = '00000000-0000-4000-8000-0000000000bf'
+    const started = await app.inject({
+      method: 'POST',
+      url: '/onboarding/plans',
+      headers: { ...auth(admin), 'Idempotency-Key': key },
+      payload: { employeeId: SEED.EMP_MARCUS, templateId: SEED.ONB_TEMPLATE_HIRE },
+    })
+    const plan = started.json()
+    const firstTask = plan.tasks[0] as { id: string }
+
+    const cancelledRes = await app.inject({
+      method: 'POST',
+      url: `/onboarding/plans/${plan.id}/cancel`,
+      headers: auth(admin),
+      payload: {},
+    })
+    expect(cancelledRes.statusCode).toBe(200)
+    expect(cancelledRes.json().status).toBe('cancelled')
+
+    const editCancelled = await app.inject({
+      method: 'PATCH',
+      url: `/onboarding/plans/${plan.id}/tasks/${firstTask.id}`,
+      headers: auth(admin),
+      payload: { status: 'completed' },
+    })
+    expect(editCancelled.statusCode).toBe(409)
+
+    const cancelCancelled = await app.inject({
+      method: 'POST',
+      url: `/onboarding/plans/${plan.id}/cancel`,
+      headers: auth(admin),
+      payload: {},
+    })
+    expect(cancelCancelled.statusCode).toBe(409)
+  })
+
+  it('keeps onboarding plans isolated across tenants (RLS)', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/onboarding/plans',
+      headers: auth(admin),
+      payload: { employeeId: SEED.EMP_MARCUS, templateId: SEED.ONB_TEMPLATE_HIRE },
+    })
+    const plan = created.json()
+
+    const crossTenantPlan = await app.inject({
+      method: 'GET',
+      url: `/onboarding/plans/${plan.id}`,
+      headers: auth(globexAdmin),
+    })
+    expect(crossTenantPlan.statusCode).toBe(404)
+
+    const crossTenantTemplate = await app.inject({
+      method: 'GET',
+      url: `/onboarding/templates/${SEED.ONB_TEMPLATE_HIRE}`,
+      headers: auth(globexAdmin),
+    })
+    expect(crossTenantTemplate.statusCode).toBe(404)
+
+    const employeeDenied = await app.inject({
+      method: 'POST',
+      url: '/onboarding/plans',
+      headers: auth(aisha),
+      payload: { employeeId: SEED.EMP_MARCUS, templateId: SEED.ONB_TEMPLATE_HIRE },
+    })
+    expect(employeeDenied.statusCode).toBe(403)
+  })
+
+  it('hire flow: offer → hired creates the employee and auto-starts the default onboarding plan', async () => {
+    // Walk a fresh candidate through the pipeline to offer, then hire.
+    const key = '00000000-0000-4000-8000-0000000000c0'
+    const candidateRes = await app.inject({
+      method: 'POST',
+      url: `/job-openings/${SEED.JOB_DESIGNER}/candidates`,
+      headers: { ...auth(admin), 'Idempotency-Key': key },
+      payload: {
+        firstName: 'Nadia',
+        lastName: 'Hussain',
+        email: 'nadia.hussain@example.com',
+        source: 'linkedin',
+        resumeText: 'Product designer, 6 years.',
+      },
+    })
+    const candidate = candidateRes.json()
+    expect(candidate.stage).toBe('sourced')
+
+    for (const stage of ['applied', 'screening', 'interview', 'offer']) {
+      const step = await app.inject({
+        method: 'POST',
+        url: `/candidates/${candidate.id}/transition`,
+        headers: auth(admin),
+        payload: { stage },
+      })
+      expect(step.statusCode).toBe(200)
+    }
+
+    const hire = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate.id}/transition`,
+      headers: auth(admin),
+      payload: { stage: 'hired' },
+    })
+    expect(hire.statusCode).toBe(200)
+    const hiredCandidate = hire.json()
+    expect(hiredCandidate.stage).toBe('hired')
+    expect(hiredCandidate.hiredEmployeeId).toBeTruthy()
+    const employeeId = hiredCandidate.hiredEmployeeId as string
+
+    // The domain event created an active employee from the candidate + opening.
+    const employee = await app.inject({
+      method: 'GET',
+      url: `/employees/${employeeId}`,
+      headers: auth(admin),
+    })
+    expect(employee.statusCode).toBe(200)
+    const emp = employee.json()
+    expect(emp.employmentStatus).toBe('active')
+    expect(emp.jobTitle).toBe('Senior Product Designer')
+    expect(emp.firstName).toBe('Nadia')
+
+    // And auto-started a system-sourced onboarding plan from the default template.
+    const plans = await app.inject({
+      method: 'GET',
+      url: `/onboarding/plans?employeeId=${employeeId}`,
+      headers: auth(admin),
+    })
+    expect(plans.statusCode).toBe(200)
+    expect(plans.json().total).toBe(1)
+    const plan = plans.json().data[0]
+    expect(plan.kind).toBe('onboarding')
+    expect(plan.source).toBe('system')
+    expect(plan.status).toBe('in_progress')
+    expect(plan.templateName).toBe('New Hire Welcome')
+  })
+})

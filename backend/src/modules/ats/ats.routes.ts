@@ -5,9 +5,12 @@ import { httpError } from '../../http/errors.js'
 import { useIdempotency } from '../../lib/idempotency.js'
 import { audit } from '../../lib/audit.js'
 import { newId } from '../../db/index.js'
+import type { Q } from '../../db/index.js'
 import { PERMISSIONS } from '../permissions.js'
 import { canTransition, PIPELINE_STAGES, type Candidate, type JobOpening } from './ats.repo.js'
 import * as repo from './ats.repo.js'
+import * as employeesRepo from '../employees/employees.repo.js'
+import * as onboardingRepo from '../onboarding/onboarding.repo.js'
 
 const jobCreateSchema = z.object({
   title: z.string().min(1).max(200),
@@ -92,6 +95,112 @@ function validateDecision(from: string, decision: string): void {
       }
       break
   }
+}
+
+export interface HireResult {
+  employeeId: string
+  onboardingPlanId: string | null
+}
+
+/**
+ * The "candidate → employee" domain event. Runs inside the transition's tenant
+ * transaction: creates the employee from the candidate + job posting details,
+ * records hire history, links the candidate, then auto-starts onboarding from
+ * the tenant's default onboarding template (skipped when none is configured).
+ */
+async function hireCandidate(
+  q: Q,
+  params: {
+    tenantId: string
+    actorId: string
+    ip: string | null
+    candidate: Candidate
+    opening: JobOpening
+  },
+): Promise<HireResult> {
+  const { tenantId, actorId, ip, candidate, opening } = params
+
+  let employee = null
+  let employeeNumber = `EMP-${newId().slice(9, 13).toUpperCase()}`
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      employee = await employeesRepo.insertEmployee(q, {
+        id: newId(),
+        tenantId,
+        employeeNumber,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        workEmail: candidate.email,
+        departmentId: opening.departmentId ?? null,
+        locationId: opening.locationId ?? null,
+        managerEmployeeId: null,
+        jobTitle: opening.title,
+        employmentType: opening.employmentType || 'full_time',
+        hireDate: new Date().toISOString().slice(0, 10),
+        personalEmail: candidate.email,
+        createdBy: actorId,
+      })
+      break
+    } catch (err) {
+      // Employee-number collision with an existing row: re-roll a fresh number.
+      if (err instanceof Error && err.message === 'INSERT_CONFLICT_EMPLOYEE_NUMBER' && attempt < 4) {
+        employeeNumber = `EMP-${newId().slice(9, 13).toUpperCase()}`
+        continue
+      }
+      throw err
+    }
+  }
+  if (!employee) throw new Error('INSERT_CONFLICT_EMPLOYEE_NUMBER')
+
+  await employeesRepo.insertEmploymentHistory(q, {
+    id: newId(),
+    tenantId,
+    employeeId: employee.id,
+    effectiveDate: employee.hireDate,
+    jobTitle: employee.jobTitle ?? null,
+    departmentId: employee.departmentId ?? null,
+    managerEmployeeId: null,
+    employmentStatus: 'active',
+    changeReason: 'hire',
+    createdBy: actorId,
+  })
+
+  await repo.setCandidateHiredEmployee(q, candidate.id, employee.id)
+
+  await audit(q, {
+    tenantId,
+    actorType: 'user',
+    actorId,
+    action: 'employee.hired',
+    entityType: 'employee',
+    entityId: employee.id,
+    after: employee,
+    ip,
+  })
+
+  const template = await onboardingRepo.getDefaultTemplate(q, tenantId, 'onboarding')
+  if (!template) return { employeeId: employee.id, onboardingPlanId: null }
+
+  const plan = await onboardingRepo.startPlan(q, {
+    id: newId(),
+    tenantId,
+    employeeId: employee.id,
+    kind: 'onboarding',
+    templateId: template.id,
+    source: 'system',
+    createdBy: actorId,
+  })
+  await audit(q, {
+    tenantId,
+    actorType: 'user',
+    actorId,
+    action: 'onboarding.onboarding_started',
+    entityType: 'onboarding_plan',
+    entityId: plan.id,
+    after: plan,
+    ip,
+  })
+  return { employeeId: employee.id, onboardingPlanId: plan.id }
 }
 
 export function registerAtsRoutes(fastify: FastifyInstance): void {
@@ -407,6 +516,20 @@ export function registerAtsRoutes(fastify: FastifyInstance): void {
         const check = canTransition(before.stage, parsed.data.stage)
         if (!check.ok) throw httpError.conflict(check.message ?? 'Invalid transition')
         const after = await repo.updateCandidateStage(q, candidateId, parsed.data.stage)
+        let hire: HireResult | null = null
+        // "candidate → employee" domain event: closing the offer creates the
+        // employee and auto-starts onboarding from the default template.
+        if (parsed.data.stage === 'hired' && !before.hiredEmployeeId) {
+          const opening = await repo.getJobOpening(q, before.jobOpeningId)
+          if (!opening) throw httpError.notFound('Job opening not found')
+          hire = await hireCandidate(q, {
+            tenantId,
+            actorId: req.ctx.userId,
+            ip: req.ip,
+            candidate: before,
+            opening,
+          })
+        }
         await audit(q, {
           tenantId,
           actorType: 'user',
@@ -415,9 +538,10 @@ export function registerAtsRoutes(fastify: FastifyInstance): void {
           entityType: 'job_candidate',
           entityId: candidateId,
           before,
-          after,
+          after: { ...after, hiredEmployeeId: hire?.employeeId ?? after?.hiredEmployeeId ?? null },
           ip: req.ip,
         })
+        return hire
       })
       return reply.send(await db.tenant(tenantId, (q) => repo.getCandidate(q, candidateId)))
     },

@@ -48,6 +48,11 @@ export const TENANT_SCOPED_TABLES = [
   // hardenRls pass (called from applyAtsSchema) picks them up idempotently.
   'job_openings',
   'job_candidates',
+  // Phase 2 — Onboarding / Offboarding checklists.
+  'onboarding_templates',
+  'onboarding_template_tasks',
+  'onboarding_plans',
+  'onboarding_tasks',
 ]
 
 /** Extra DDL appended after the canonical schema (extensions to the Phase 0/1 surface). */
@@ -96,6 +101,18 @@ export async function applyAtsSchema(exec: SqlExecutor): Promise<void> {
   await hardenRls(exec)
 }
 
+/**
+ * Phase 2 migration 2 — Onboarding/Offboarding checklists. Same mechanism as
+ * applyAtsSchema: `IF NOT EXISTS` DDL + an idempotent hardening re-run so every
+ * environment (fresh or existing) converges on the latest schema + RLS.
+ */
+export async function applyOnboardingSchema(exec: SqlExecutor): Promise<void> {
+  const onboardingUrl = new URL('../../../phase2-onboarding.sql', import.meta.url)
+  const onboarding = await readFile(onboardingUrl, 'utf8')
+  await exec.exec(transformSchema(onboarding))
+  await hardenRls(exec)
+}
+
 function createRoleSql(): string {
   return `
 DO $$
@@ -120,7 +137,20 @@ export async function hardenRls(exec: SqlExecutor): Promise<void> {
   await exec.exec(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`)
   await exec.exec(`GRANT CREATE ON SCHEMA public TO ${APP_ROLE}`)
 
+  // Phase-2 tables may not exist yet at the moment their sibling migration's
+  // hardening pass runs (applyAtsSchema → hardenRls runs before
+  // applyOnboardingSchema has created the onboarding tables). Skip any table
+  // that isn't present so the pass stays idempotent and order-independent.
+  const existing: string[] = []
   for (const table of TENANT_SCOPED_TABLES) {
+    const probe = await exec.query<{ regclass: string | null }>(
+      `SELECT to_regclass('public.' || $1)::text AS "regclass"`,
+      [table],
+    )
+    if (probe.rows[0]?.regclass) existing.push(table)
+  }
+
+  for (const table of existing) {
     await exec.exec(`ALTER TABLE ${table} OWNER TO ${APP_ROLE}`)
   }
 
@@ -128,7 +158,7 @@ export async function hardenRls(exec: SqlExecutor): Promise<void> {
   // app_rls_user, so impersonate it inside one transaction (LOCAL reverts).
   await exec.exec(`BEGIN`)
   await exec.exec(`SET LOCAL ROLE ${APP_ROLE}`)
-  for (const table of TENANT_SCOPED_TABLES) {
+  for (const table of existing) {
     await exec.exec(`DROP POLICY IF EXISTS tenant_isolation ON ${table}`)
     await exec.exec(
       `CREATE POLICY tenant_isolation ON ${table} FOR ALL
