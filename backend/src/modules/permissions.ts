@@ -48,6 +48,10 @@ export const SYSTEM_ROLES: Record<
   },
   employee: {
     label: 'Employee',
-    permissions: [PERMISSIONS.EMPLOYEE_READ, PERMISSIONS.LEAVE_READ],
+    permissions: [
+      PERMISSIONS.EMPLOYEE_READ,
+      PERMISSIONS.LEAVE_READ,
+      PERMISSIONS.ATTENDANCE_READ,
+    ],
   },
 }

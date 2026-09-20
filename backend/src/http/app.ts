@@ -7,6 +7,7 @@ import { registerErrorHandler } from './errors.js'
 import { registerAuthRoutes } from '../modules/auth/auth.routes.js'
 import { registerEmployeeRoutes } from '../modules/employees/employees.routes.js'
 import { registerLeaveRoutes } from '../modules/leave/leave.routes.js'
+import { registerAttendanceRoutes } from '../modules/attendance/attendance.routes.js'
 
 function landingPage(): string {
   return `<!doctype html>
@@ -92,6 +93,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   registerAuthRoutes(fastify)
   registerEmployeeRoutes(fastify)
   registerLeaveRoutes(fastify)
+  registerAttendanceRoutes(fastify)
 
   return fastify
 }

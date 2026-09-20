@@ -80,6 +80,9 @@ async function seedRolesForTenant(q: Q, tenantId: string, permissionIds: Record<
       roleName,
     ])
     const roleId = role.rows[0]!.id
+    // Reconcile the system role's permission set instead of "insert if absent":
+    // a re-seed must reflect permission changes shipped in later releases.
+    await q.exec(`DELETE FROM role_permissions WHERE role_id = $1`, [roleId])
     for (const permCode of def.permissions) {
       const permissionId = permissionIds[permCode]
       if (!permissionId) continue
@@ -316,6 +319,11 @@ export async function resetDemoLeaveState(db: Db): Promise<void> {
       [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
     ])
     await q.exec(`DELETE FROM leave_balances WHERE tenant_id = ANY($1::uuid[])`, [
+      [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
+    ])
+    // Attendance records are created/destroyed by the same suite's clock-in/out
+    // flow; wipe them so re-runs start from a clean state.
+    await q.exec(`DELETE FROM attendance_records WHERE tenant_id = ANY($1::uuid[])`, [
       [SEED.TENANT_ACME, SEED.TENANT_GLOBEX],
     ])
     await seedAcme(q)

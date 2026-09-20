@@ -333,3 +333,108 @@ describe('leave', () => {
     expect(own.json().data.length).toBe(1)
   })
 })
+
+describe('attendance', () => {
+  it('clocks in once, rejects a second clock-in, then clocks out', async () => {
+    const clockIn = await app.inject({
+      method: 'POST',
+      url: '/attendance/clock-in',
+      headers: { ...auth(aisha), 'idempotency-key': '00000000-0000-4000-8000-0000000000f2' },
+      payload: { source: 'web' },
+    })
+    expect(clockIn.statusCode).toBe(201)
+    const rec = clockIn.json()
+    expect(rec.employeeId).toBe(SEED.EMP_AISHA)
+    expect(rec.clockInAt).toBeTruthy()
+    expect(rec.clockOutAt).toBeNull()
+    expect(rec.totalMinutes).toBeNull()
+
+    const dup = await app.inject({
+      method: 'POST',
+      url: '/attendance/clock-in',
+      headers: { ...auth(aisha), 'idempotency-key': '00000000-0000-4000-8000-0000000000f3' },
+      payload: { source: 'mobile', geo: { lat: 31.5, lng: 74.3 } },
+    })
+    expect(dup.statusCode).toBe(409)
+
+    const clockOut = await app.inject({
+      method: 'POST',
+      url: '/attendance/clock-out',
+      headers: { ...auth(aisha), 'idempotency-key': '00000000-0000-4000-8000-0000000000f4' },
+    })
+    expect(clockOut.statusCode).toBe(200)
+    const closed = clockOut.json()
+    expect(closed.id).toBe(rec.id)
+    expect(closed.clockOutAt).toBeTruthy()
+    expect(closed.totalMinutes).toBeGreaterThanOrEqual(0)
+
+    const noOpen = await app.inject({
+      method: 'POST',
+      url: '/attendance/clock-out',
+      headers: { ...auth(aisha), 'idempotency-key': '00000000-0000-4000-8000-0000000000f5' },
+    })
+    expect(noOpen.statusCode).toBe(404)
+  })
+
+  it('replays a clock-in idempotency key without a second record', async () => {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/attendance/clock-in',
+      headers: { ...auth(admin), 'idempotency-key': '00000000-0000-4000-8000-0000000000f6' },
+      payload: { source: 'biometric' },
+    })
+    expect(first.statusCode).toBe(201)
+
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/attendance/clock-in',
+      headers: { ...auth(admin), 'idempotency-key': '00000000-0000-4000-8000-0000000000f6' },
+      payload: { source: 'biometric' },
+    })
+    expect(replay.statusCode).toBe(201)
+    expect(replay.json().id).toBe(first.json().id)
+  })
+
+  it('scopes attendance reads: self, directory, and cross-tenant', async () => {
+    const own = await app.inject({
+      method: 'GET',
+      url: `/employees/${SEED.EMP_AISHA}/attendance`,
+      headers: auth(aisha),
+    })
+    expect(own.statusCode).toBe(200)
+    expect(own.json().length).toBeGreaterThanOrEqual(1)
+    expect(own.json().every((r: { employeeId: string }) => r.employeeId === SEED.EMP_AISHA)).toBe(true)
+
+    const otherEmployee = await app.inject({
+      method: 'GET',
+      url: `/employees/${SEED.EMP_PRIYA}/attendance`,
+      headers: auth(aisha),
+    })
+    expect(otherEmployee.statusCode).toBe(404)
+
+    const asManager = await app.inject({
+      method: 'GET',
+      url: `/employees/${SEED.EMP_AISHA}/attendance`,
+      headers: auth(priya),
+    })
+    expect(asManager.statusCode).toBe(200)
+
+    const crossTenant = await app.inject({
+      method: 'GET',
+      url: `/employees/${SEED.EMP_AISHA}/attendance`,
+      headers: auth(globexAdmin),
+    })
+    expect(crossTenant.statusCode).toBe(404)
+
+    const fromTo = await app.inject({
+      method: 'GET',
+      url: `/employees/${SEED.EMP_AISHA}/attendance?from=2020-01-01&to=2999-01-01`,
+      headers: auth(admin),
+    })
+    expect(fromTo.statusCode).toBe(200)
+    expect(fromTo.json().length).toBeGreaterThanOrEqual(1)
+
+    const anon = await app.inject({ method: 'GET', url: `/employees/${SEED.EMP_AISHA}/attendance` })
+    expect(anon.statusCode).toBe(401)
+  })
+})

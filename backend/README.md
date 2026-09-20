@@ -55,14 +55,16 @@ pnpm dev                    # http://localhost:4000
 ## Test suite
 
 ```bash
-pnpm test   # 13 e2e tests against DATABASE_URL (Neon). ~82s cold, re-runnable.
+pnpm test   # 16 e2e tests against DATABASE_URL (Neon). ~105s cold, re-runnable.
 ```
 
 Covers: login/JWT/refresh-rotation, idempotent `POST /employees` (replay of the
 same Idempotency-Key returns the stored 201, not a duplicate), `POST /leave`
-submit + `PATCH /leave/:id` approve (balance arithmetic), tenure-history trail,
-employee offboarding, manager/self permission guards, cross-tenant 404s
-(employee isolation), and a **12-way `Promise.all` RLS isolation burst**
+submit + `PATCH /leave/:id` approve (balance arithmetic), attendance clock-in/
+out (single open record per employee, idempotent replay, self vs directory vs
+cross-tenant scoped reads), tenure-history trail, employee offboarding,
+manager/self permission guards, cross-tenant 404s (employee isolation), and a
+**12-way `Promise.all` RLS isolation burst**
 (6 Acme + 6 Globex concurrent queries — every one stays within its own tenant).
 
 The suite mutates leave requests/approvals, so it calls
