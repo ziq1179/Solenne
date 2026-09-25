@@ -133,3 +133,23 @@ export function fmtDate(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+
+export function num(v: number | string | null | undefined): number | null {
+  if (v == null || v === '') return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+export function fmtMoney(v: number | string | null | undefined, currency = 'USD'): string {
+  const n = num(v)
+  if (n == null) return '—'
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency, minimumFractionDigits: 2 }).format(n)
+}
+
+export function fmtPeriod(start: string, end: string): string {
+  const s = new Date(start)
+  const e = new Date(end)
+  const startLabel = s.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  const endLabel = e.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${startLabel} – ${endLabel}`
+}

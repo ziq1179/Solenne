@@ -3,7 +3,7 @@
 import { useEffect, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, Briefcase, CalendarClock, ChartBar, CreditCard, LogOut, MessageSquare, Plane, type LucideIcon } from 'lucide-react'
+import { Bell, Briefcase, CalendarClock, ChartBar, CreditCard, LogOut, MessageSquare, Plane, Wallet, type LucideIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from './auth'
 import { Spinner } from './ui'
@@ -11,6 +11,7 @@ import { Spinner } from './ui'
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: CalendarClock },
   { href: '/leave', label: 'Leave', icon: Plane },
+  { href: '/payroll', label: 'Payroll', icon: Wallet },
   { href: '/assistant', label: 'Assistant', icon: MessageSquare },
   { href: '/recruitment', label: 'Recruitment', icon: Briefcase },
   { href: '/reports', label: 'Reports', icon: ChartBar },
@@ -41,6 +42,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { me, logout } = useAuth()
   const pathname = usePathname()
 
+  // Payroll is self-service for employees (my payslips only); runs require payroll:read.
+  const payrollHref = me?.permissions.includes('payroll:read') ? '/payroll' : '/payroll/my-payslips'
+  const navItems = NAV.map((item) => (item.href === '/payroll' ? { ...item, href: payrollHref } : item))
+
   return (
     <div className="min-h-screen bg-paper text-ink">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
@@ -53,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </Link>
             <nav className="hidden items-center gap-1 sm:flex">
-              {NAV.map((item) => {
+              {navItems.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href)
                 return (
                   <Link

@@ -166,6 +166,81 @@ export const PLAN_SEAT_LIMITS: Record<string, number> = {
   enterprise: 1000,
 }
 
+/* ── Directory (Core HR) ────────────────────────────────────────────────── */
+
+export interface EmployeeRecord {
+  id: string
+  employeeNumber: string
+  firstName: string
+  lastName: string
+  workEmail: string | null
+  jobTitle: string | null
+  employmentType: string
+  employmentStatus: string
+  hireDate: string | null
+}
+
+/* ── Payroll ────────────────────────────────────────────────────────────── */
+
+export interface PayrollRun {
+  id: string
+  tenantId: string
+  periodStart: string
+  periodEnd: string
+  status: string
+  totalGross: number | string | null
+  totalNet: number | string | null
+  totalDeductions: number | string | null
+  employeeCount: number | null
+  currency: string
+  notes: string | null
+  correctionOf: string | null
+  approvedBy: string | null
+  approvedAt: string | null
+  paidAt: string | null
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PayrollDeduction {
+  name: string
+  amount: number
+}
+
+export interface Payslip {
+  id: string
+  tenantId: string
+  payrollRunId: string
+  employeeId: string
+  compensationRecordId: string
+  basePay: number | string
+  overtimePay: number | string
+  bonus: number | string
+  otherEarnings: number | string
+  grossPay: number | string
+  deductions: PayrollDeduction[]
+  totalDeductions: number | string
+  netPay: number | string
+  currency: string
+  taxCompliant: boolean
+  createdAt: string
+}
+
+export const PAYROLL_RUN_STATUSES = ['draft', 'calculated', 'approved', 'paid'] as const
+export const PAYROLL_RUN_LABELS: Record<string, string> = {
+  draft: 'Draft',
+  calculated: 'Calculated',
+  approved: 'Approved',
+  paid: 'Paid',
+}
+export const PAYROLL_RUN_TONES: Record<string, 'slate' | 'sky' | 'amber' | 'green'> = {
+  draft: 'slate',
+  calculated: 'sky',
+  approved: 'amber',
+  paid: 'green',
+}
+
 /* ── ATS / Recruitment ──────────────────────────────────────────────────── */
 
 export interface JobOpening {
@@ -307,6 +382,47 @@ export const api = {
     request<SignupResult>('/tenants/signup', { method: 'POST', body: JSON.stringify(body) }, false, false),
 
   me: () => request<Me>('/auth/me', { method: 'GET' }, true, true),
+
+  /* ── Directory (Core HR) ────────────────────────────────────────────── */
+
+  employees: (opts?: { status?: string; departmentId?: string; page?: number; pageSize?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.status) p.set('status', opts.status)
+    if (opts?.departmentId) p.set('departmentId', opts.departmentId)
+    if (opts?.page) p.set('page', String(opts.page))
+    if (opts?.pageSize) p.set('pageSize', String(opts.pageSize))
+    const qs = p.toString()
+    return request<{ data: EmployeeRecord[]; page: number; pageSize: number; total: number }>(
+      `/employees${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+      true,
+      true,
+    )
+  },
+
+  /* ── Payroll ────────────────────────────────────────────────────────── */
+
+  payrollRuns: (opts?: { status?: string; page?: number; pageSize?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.status) p.set('status', opts.status)
+    if (opts?.page) p.set('page', String(opts.page))
+    if (opts?.pageSize) p.set('pageSize', String(opts.pageSize))
+    const qs = p.toString()
+    return request<{ data: PayrollRun[]; total: number }>(
+      `/payroll/runs${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+      true,
+      true,
+    )
+  },
+
+  payrollRunPayslips: (runId: string) =>
+    request<Payslip[]>(`/payroll/runs/${runId}/payslips`, { method: 'GET' }, true, true),
+
+  payslip: (slipId: string) =>
+    request<Payslip>(`/payroll/payslips/${slipId}`, { method: 'GET' }, true, true),
+
+  myPayslips: () => request<Payslip[]>('/payroll/my-payslips', { method: 'GET' }, true, true),
 
   leaveTypes: () => request<LeaveType[]>('/leave-types', { method: 'GET' }, true, true),
 
