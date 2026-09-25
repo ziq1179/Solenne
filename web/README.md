@@ -1,4 +1,4 @@
-# Solenne ESS — Trellis HRMS employee self-service
+# Trellis ESS — HRMS employee self-service
 
 Client app for the Trellis HRMS platform (backend: `../backend`). Next.js 16.3.5 +
 TypeScript + Tailwind v4, fully client-side with TanStack Query, consuming the
@@ -50,6 +50,6 @@ pnpm build && pnpm lint   # CI-equivalent gate (both must pass green)
 
 - All data flows through `lib/api.ts`, a single typed client with silent
   401 → `/auth/refresh` token rotation and a shared refresh promise.
-- Tokens live in `localStorage` (`solenne.access`, `solenne.refresh`).
+- Tokens live in `localStorage` (`trellis.access`, `trellis.refresh`).
 - Next.js 16 has breaking changes; keep `AGENTS.md` in sync (re-added by
   `next dev`) and consult `node_modules/next/dist/docs/` before writing code.

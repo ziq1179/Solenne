@@ -16,7 +16,7 @@ export default function Home() {
 
   return (
     <div className="grid min-h-screen place-items-center">
-      <Spinner label="Solenne — loading…" />
+      <Spinner label="Trellis — loading…" />
     </div>
   )
 }

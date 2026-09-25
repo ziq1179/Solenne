@@ -49,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href="/dashboard" className="flex items-center gap-2 text-sm font-semibold">
               <CalendarClock className="h-5 w-5 text-brass" />
               <span>
-                Solenne <span className="text-brass">ESS</span>
+                Trellis <span className="text-brass">ESS</span>
               </span>
             </Link>
             <nav className="hidden items-center gap-1 sm:flex">

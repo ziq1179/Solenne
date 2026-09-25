@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   Solenne — Meridian (a light "paper & ink" ESS).
+   Trellis — a light "paper & ink" ESS.
    Headings: Fraunces (serif) · Body: Inter · Mono: Geist Mono
     Module accents: brass (Core HR) wine (Leave) forest (Payroll)
        plum (Reports/Performance) cobalt (ESS/Self-Service) teal (Recruitment)
        bronze (Billing) — see AUDIT-MODULE-ACCENTS.md for full registry
    ========================================================================== */
 
-/* Map Meridian palette + module accents into Tailwind theme tokens */
+/* Map Trellis palette + module accents into Tailwind theme tokens */
 @theme inline {
   --color-background: #fafaf8 saturate(0.02) hue-rotate(0deg);
   --color-foreground: var(--ink);

@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Solenne — Trellis ESS",
+  title: "Trellis ESS",
   description: "Employee self-service for the Trellis HRMS platform.",
 };
 

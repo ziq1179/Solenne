@@ -30,7 +30,7 @@ function landingPage(): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Solenne — Trellis HR API</title>
+    <title>Trellis HR API</title>
     <style>
       :root { color-scheme: light dark; }
       body {
@@ -64,7 +64,7 @@ function landingPage(): string {
   </head>
   <body>
     <main>
-      <h1>Solenne <span>—</span> Trellis HR API</h1>
+      <h1>Trellis <span>—</span> HR API</h1>
       <p class="lead">The backend for the Trellis HRMS SaaS platform. Tenancy, auth/IAM, core HR, leave, attendance, reporting and audit — with per-tenant Row-Level-Security.</p>
       <div class="status">● API online</div>
       <ul>
@@ -73,7 +73,7 @@ function landingPage(): string {
         <li><a href="/auth/refresh">POST /auth/refresh</a> — <code>rotate tokens</code></li>
         <li><a href="/auth/me">GET /auth/me</a> — <code>current user (Bearer token)</code></li>
       </ul>
-      <footer>Solenne v1.0.0 — Fastify &middot; PostgreSQL &middot; Neon</footer>
+      <footer>Trellis API — Fastify &middot; PostgreSQL &middot; Neon</footer>
     </main>
   </body>
 </html>`

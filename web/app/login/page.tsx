@@ -44,7 +44,7 @@ export default function LoginPage() {
         <div className="mb-8 flex items-center justify-center gap-2">
           <CalendarClock className="h-7 w-7 text-brass" />
           <div className="font-display text-xl text-ink">
-            Solenne <span className="text-brass">ESS</span>
+            Trellis <span className="text-brass">ESS</span>
           </div>
         </div>
         <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-line bg-paper p-6">

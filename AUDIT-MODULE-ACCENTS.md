@@ -1,4 +1,4 @@
-# Meridian ESS — Module Accent Deep Audit
+# Trellis ESS — Module Accent Deep Audit
 
 **Date:** 2026-09-21
 **Scope:** All screens built through items 2 and 3
@@ -27,13 +27,13 @@ Each token has four variants: base, `-soft` (lighter + desaturated, for hover/se
 **Route:** `/login`
 **Accent:** Brass (brand identity of the entry point)
 
-The concept file never designed an auth screen. Brass is the foundational brand accent of "Solenne ESS" — it's the color of the logo mark, the "ESS" suffix in the wordmark, and the Core HR module it represents. Using it at the entry point is a deliberate choice: the login screen IS the face of the product.
+The concept file never designed an auth screen. Brass is the foundational brand accent of "Trellis ESS" — it's the color of the logo mark, the "ESS" suffix in the wordmark, and the Core HR module it represents. Using it at the entry point is a deliberate choice: the login screen IS the face of the product.
 
 ### Class-by-class
 
 | Element | Classes | Token | Assessment |
 |---|---|---|---|
-| Page background | `grid min-h-screen place-items-center bg-paper px-4` | Paper | Correct — warm off-white, Meridian base |
+| Page background | `grid min-h-screen place-items-center bg-paper px-4` | Paper | Correct — warm off-white, Trellis base |
 | Logo SVG | `h-7 w-7 text-brass` | Brass | Correct — brand icon |
 | Wordmark | `font-display text-xl text-ink` + `text-brass` on "ESS" | Ink + brass | Correct — matches concept brand treatment |
 | Form card | `rounded-2xl border border-line bg-paper p-6` | Neutral | Correct — subtle container, not module-specific |
@@ -52,7 +52,7 @@ The concept file never designed an auth screen. Brass is the foundational brand 
 **Route:** `/signup`
 **Accent:** Brass (brand identity, matching login)
 
-Originally rendered with a dark slate theme (`bg-slate-950`, `text-sky-400`, `border-slate-800`). Converted to Meridian light theme to match login.
+Originally rendered with a dark slate theme (`bg-slate-950`, `text-sky-400`, `border-slate-800`). Converted to the Trellis light theme to match login.
 
 ### Class-by-class (post-fix)
 

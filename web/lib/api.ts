@@ -209,8 +209,8 @@ export const JOB_STATUSES = ['draft', 'pending_approval', 'open', 'on_hold', 'cl
 export const PIPELINE_STAGES = ['sourced', 'applied', 'screening', 'interview', 'offer', 'hired', 'rejected'] as const
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://backend-liard-chi-84.vercel.app'
-const ACCESS_KEY = 'solenne.access'
-const REFRESH_KEY = 'solenne.refresh'
+const ACCESS_KEY = 'trellis.access'
+const REFRESH_KEY = 'trellis.refresh'
 
 export class ApiError extends Error {
   constructor(
