@@ -10,6 +10,10 @@ export interface Config {
   jwtSecret: string
   jwtExpires: string
   refreshExpiresDays: number
+  /** Integration Hub master key (KEK) for envelope encryption. undefined if not configured. */
+  integrationHubKey: Buffer | undefined
+  /** Current master key version (used when encrypting new credentials). */
+  currentKeyVersion: number
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -28,6 +32,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     jwtSecret: env.JWT_SECRET ?? 'dev-only-secret-change-me',
     jwtExpires: env.JWT_EXPIRES ?? '15m',
     refreshExpiresDays: Number(env.REFRESH_EXPIRES_DAYS ?? 14),
+    integrationHubKey: env.INTEGRATION_HUB_KEY
+      ? Buffer.from(env.INTEGRATION_HUB_KEY, 'base64')
+      : undefined,
+    currentKeyVersion: Number(env.CURRENT_KEY_VERSION ?? 1),
   }
 }
 
