@@ -18,7 +18,10 @@ function LeaveWorkspace({ employeeId }: { employeeId: string }) {
   const [formError, setFormError] = useState<string | null>(null)
 
   const leaveTypes = useQuery({ queryKey: ['leave-types'], queryFn: () => api.leaveTypes() })
-  const requests = useQuery({ queryKey: ['leave-requests', 'mine'], queryFn: () => api.myLeaveRequests() })
+  const requests = useQuery({
+    queryKey: ['leave-requests', 'mine'],
+    queryFn: () => api.myLeaveRequests({ pageSize: 50 }),
+  })
 
   const submit = useMutation({
     mutationFn: (body: { leaveTypeId: string; startDate: string; endDate: string; reason?: string }) =>
@@ -96,11 +99,11 @@ function LeaveWorkspace({ employeeId }: { employeeId: string }) {
         <CardTitle>My requests</CardTitle>
         {requests.isPending ? (
           <Spinner />
-        ) : (requests.data ?? []).length === 0 ? (
+        ) : (requests.data?.data ?? []).length === 0 ? (
           <p className="text-sm text-wine-soft">No requests yet.</p>
         ) : (
           <ul className="space-y-2">
-            {(requests.data ?? []).map((r) => (
+            {(requests.data?.data ?? []).map((r) => (
               <li key={r.id} className="rounded-lg bg-wine-tint px-3 py-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-wine-ink">

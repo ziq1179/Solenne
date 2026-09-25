@@ -149,22 +149,26 @@ function HistoryCard() {
 }
 
 function RequestsCard() {
-  const requests = useQuery({ queryKey: ['leave-requests', 'mine'], queryFn: () => api.myLeaveRequests() })
+  const requests = useQuery({
+    queryKey: ['leave-requests', 'mine'],
+    queryFn: () => api.myLeaveRequests({ pageSize: 5 }),
+  })
   const leaveTypes = useQuery({ queryKey: ['leave-types'], queryFn: () => api.leaveTypes() })
 
   if (requests.isPending || leaveTypes.isPending) return <Spinner />
   if (requests.isError || leaveTypes.isError) return <Alert>Failed to load leave requests.</Alert>
 
   const nameById = new Map(leaveTypes.data.map((t) => [t.id, t.name] as const))
+  const rows = requests.data.data
 
   return (
     <Card>
       <CardTitle>Recent leave requests</CardTitle>
-      {requests.data.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="text-sm text-slate-500">No requests yet.</p>
       ) : (
         <ul className="space-y-2">
-          {requests.data.slice(0, 5).map((r) => (
+          {rows.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg bg-cobalt-tint px-3 py-2">
               <div className="flex items-center gap-2">
                 <Plane className="h-4 w-4 text-cobalt" />

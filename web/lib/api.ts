@@ -332,8 +332,19 @@ export const api = {
       true,
     ),
 
-  myLeaveRequests: () =>
-    request<LeaveRequest[]>('/leave-requests', { method: 'GET' }, true, true),
+  myLeaveRequests: (opts?: { page?: number; pageSize?: number; status?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.page) p.set('page', String(opts.page))
+    if (opts?.pageSize) p.set('pageSize', String(opts.pageSize))
+    if (opts?.status) p.set('status', opts.status)
+    const qs = p.toString()
+    return request<{ data: LeaveRequest[]; page: number; pageSize: number; total: number }>(
+      `/leave-requests${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+      true,
+      true,
+    )
+  },
 
   submitLeave: (body: { leaveTypeId: string; startDate: string; endDate: string; reason?: string }, idempotencyKey: string) =>
     request<LeaveRequest>(
