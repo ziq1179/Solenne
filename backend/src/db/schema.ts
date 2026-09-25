@@ -28,6 +28,18 @@ export interface Row {
 
 export const APP_ROLE = 'app_rls_user'
 
+/** A dedicated tenant schema name: `tn_` + 32 lowercase hex chars (sha256 of the tenant id). */
+export const SCHEMA_RE = /^tn_[a-f0-9]{32}$/
+
+/** Accepts only the shared `public` schema or a derived dedicated schema name. */
+export function assertSchemaName(schemaName: string): void {
+  if (schemaName !== 'public' && !SCHEMA_RE.test(schemaName)) {
+    throw new Error(
+      `Invalid schema name "${schemaName}" — expected 'public' or a derived tn_<sha256> name`,
+    )
+  }
+}
+
 export const TENANT_SCOPED_TABLES = [
   'user_accounts',
   'roles',
@@ -58,10 +70,40 @@ export const TENANT_SCOPED_TABLES = [
   // Phase 2 — Billing & metering.
   'subscriptions',
   'usage_events',
+  // Phase 3 — AI Agent: policy documents + pgvector embeddings.
+  'policy_documents',
+  'policy_document_chunks',
+  // Phase 4 — Payroll.
+  'payroll_runs',
+  'payslips',
+  // Phase 4 — Performance Management.
+  'goals',
+  'review_cycles',
+  'cycle_goals',
+  'performance_reviews',
+  'feedback_entries',
+  // Phase 4 — Benefits Administration.
+  'benefit_plans',
+  'enrollment_periods',
+  'benefit_enrollments',
+  'benefit_dependents',
+  'enrollment_dependents',
+  'life_events',
+  // Phase 4 — Integration Hub.
+  'integration_connections',
 ]
 
+/**
+ * Tables fully collapsed at purge. `refresh_tokens` is deliberately absent —
+ * it is the global session registry (§4.5) and the one documented retention:
+ * purge clears only its expired/revoked rows and keeps active ones until TTL.
+ */
+export const TENANT_PURGED_TABLES: readonly string[] = TENANT_SCOPED_TABLES.filter(
+  (t) => t !== 'refresh_tokens',
+)
+
 /** Extra DDL appended after the canonical schema (extensions to the Phase 0/1 surface). */
-const EXTRA_DDL = `
+export const EXTRA_DDL = `
 CREATE TABLE IF NOT EXISTS idempotency_keys (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID NOT NULL REFERENCES tenants(id),
@@ -138,6 +180,126 @@ export async function applyBillingSchema(exec: SqlExecutor): Promise<void> {
   await hardenRls(exec)
 }
 
+/**
+ * Phase 3 migration — AI Agent layer. Policy document tables + pgvector
+ * embeddings for RAG search. Same mechanism: `IF NOT EXISTS` DDL + hardening.
+ *
+ * pgvector extension must be created before the DDL — transformSchema strips
+ * CREATE EXTENSION lines (designed for uuid-ossp/pgcrypto), so we handle it
+ * here explicitly.
+ */
+export async function applyAiSchema(exec: SqlExecutor): Promise<void> {
+  // Create the pgvector extension if not present.
+  await exec.exec(`CREATE EXTENSION IF NOT EXISTS vector`)
+  const url = new URL('../../../phase3-ai.sql', import.meta.url)
+  await exec.exec(transformSchema(await readFile(url, 'utf8')))
+  await hardenRls(exec)
+}
+
+/**
+ * Phase 4 migration — Payroll module. Payroll runs + payslips. Reads from
+ * compensation_records (Phase 0/1). Same mechanism: IF NOT EXISTS DDL + hardening.
+ */
+export async function applyPayrollSchema(exec: SqlExecutor): Promise<void> {
+  const url = new URL('../../../phase4-payroll.sql', import.meta.url)
+  await exec.exec(transformSchema(await readFile(url, 'utf8')))
+  await hardenRls(exec)
+}
+
+/**
+ * Phase 4 migration — Performance Management module. Goals, review cycles,
+ * performance reviews, and continuous feedback. Reads from employees (Phase 0/1).
+ */
+export async function applyPerformanceSchema(exec: SqlExecutor): Promise<void> {
+  const url = new URL('../../../phase4-performance.sql', import.meta.url)
+  await exec.exec(transformSchema(await readFile(url, 'utf8')))
+  await hardenRls(exec)
+}
+
+/**
+ * Phase 4 migration — Benefits Administration module. Benefit plans, enrollment
+ * periods, employee elections, dependents, and life events.
+ */
+export async function applyBenefitsSchema(exec: SqlExecutor): Promise<void> {
+  const url = new URL('../../../phase4-benefits.sql', import.meta.url)
+  await exec.exec(transformSchema(await readFile(url, 'utf8')))
+  await hardenRls(exec)
+}
+
+/**
+ * Phase 4 migration — Integration Hub module. Third-party credential storage
+ * and outbound dispatch.
+ */
+export async function applyIntegrationsSchema(exec: SqlExecutor): Promise<void> {
+  const url = new URL('../../../phase4-integrations.sql', import.meta.url)
+  await exec.exec(transformSchema(await readFile(url, 'utf8')))
+  await hardenRls(exec)
+}
+
+/**
+ * Phase 5 migration — SSO/OIDC integration. Adds sso_config_json to tenants.
+ */
+export async function applySsoSchema(exec: SqlExecutor): Promise<void> {
+  const url = new URL('../../../phase5-sso.sql', import.meta.url)
+  await exec.exec(transformSchema(await readFile(url, 'utf8')))
+  await hardenRls(exec)
+}
+
+/**
+ * Phase 5 migration — Dedicated per-tenant tier. Adds the platform state the
+ * migration machine depends on, all idempotent (`IF NOT EXISTS` / `ADD COLUMN
+ * IF NOT EXISTS`) so a crash between DDL and marker-persist converges on the
+ * next boot:
+ *  - `tenant_migrations` — global state machine ledger (no RLS policy of its
+ *    own: platform state, same posture as `schema_migrations`).
+ *  - partial unique index: one in-flight migration per tenant.
+ *  - `tenants.isolation_mode` / `dedicated_schema` (plus reserved, unused
+ *    `dedicated_region`).
+ * No hardening pass: the new table is global and explicitly unpolicied.
+ */
+export async function applyDedicatedTierSchema(exec: SqlExecutor): Promise<void> {
+  await exec.exec(`CREATE EXTENSION IF NOT EXISTS vector`)
+  await exec.exec(`
+CREATE TABLE IF NOT EXISTS tenant_migrations (
+    migration_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id         UUID NOT NULL REFERENCES tenants(id),
+    isolation_from    TEXT NOT NULL DEFAULT 'shared',
+    isolation_to      TEXT NOT NULL DEFAULT 'dedicated_schema',
+    status            TEXT NOT NULL DEFAULT 'prepared',  -- prepared|copying|verifying|cutover|purged|failed|aborted|rolled_back
+    schema_name       TEXT,
+    manifest_json     JSONB,                             -- per-table row count + checksum snapshot
+    verification_json JSONB,                             -- per-table verification result
+    status_before     JSONB,                             -- pre-flight state saved for rollback
+    started_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    got_into_cutover_at TIMESTAMPTZ,
+    purged_at         TIMESTAMPTZ,
+    completed_at      TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_migrations_inflight
+    ON tenant_migrations (tenant_id)
+    WHERE status NOT IN ('purged', 'failed', 'aborted', 'rolled_back');
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS isolation_mode TEXT NOT NULL DEFAULT 'shared';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS dedicated_schema TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS dedicated_region TEXT;
+`)
+}
+
+/**
+ * Phase 5 dedicated-tier auth follow-up. The session registry
+ * (`public.refresh_tokens`, §4.5) is platform state, the same way
+ * `schema_migrations` is — but its `user_id` FK pointed at the tenant-scoped
+ * `public.user_accounts` row that purge collapses, which both cascaded away
+ * the actively-retained tokens when the user row was purged and made any
+ * post-purge token insert violate the constraint. Drop that FK: identity now
+ * flows through the dedicated schema, exactly like every other tenant read
+ * (`tenant_id → tenants(id)` remains and is never cascaded).
+ */
+export async function applyDedicatedTierAuthSchema(exec: SqlExecutor): Promise<void> {
+  await exec.exec(
+    `ALTER TABLE public.refresh_tokens DROP CONSTRAINT IF EXISTS refresh_tokens_user_id_fkey`,
+  )
+}
+
 function createRoleSql(): string {
   return `
 DO $$
@@ -149,18 +311,20 @@ END $$;
 `
 }
 
-export async function hardenRls(exec: SqlExecutor): Promise<void> {
+export async function hardenRls(exec: SqlExecutor, schemaName = 'public'): Promise<void> {
   // Runs on a SINGLE pooled connection (see Db.open). Order matters:
   //  1. grants that make the other steps legal,
   //  2. ownership transfers (needs membership + schema USAGE/CREATE for target),
   //  3. policies/force/revokes under the app role (tables are owned by it now),
   //  4. read grants for the few global tables the surface uses.
+  assertSchemaName(schemaName)
+  const schema = schemaName === 'public' ? 'public' : `"${schemaName}"`
 
   // SET ROLE / ownership transfers require membership in the target role and
   // the target must be able to enter its own schema.
   await exec.exec(`GRANT ${APP_ROLE} TO CURRENT_USER`)
-  await exec.exec(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`)
-  await exec.exec(`GRANT CREATE ON SCHEMA public TO ${APP_ROLE}`)
+  await exec.exec(`GRANT USAGE ON SCHEMA ${schema} TO ${APP_ROLE}`)
+  await exec.exec(`GRANT CREATE ON SCHEMA ${schema} TO ${APP_ROLE}`)
 
   // Phase-2 tables may not exist yet at the moment their sibling migration's
   // hardening pass runs (applyAtsSchema → hardenRls runs before
@@ -169,14 +333,14 @@ export async function hardenRls(exec: SqlExecutor): Promise<void> {
   const existing: string[] = []
   for (const table of TENANT_SCOPED_TABLES) {
     const probe = await exec.query<{ regclass: string | null }>(
-      `SELECT to_regclass('public.' || $1)::text AS "regclass"`,
-      [table],
+      `SELECT to_regclass($1)::text AS "regclass"`,
+      [`${schemaName}.${table}`],
     )
     if (probe.rows[0]?.regclass) existing.push(table)
   }
 
   for (const table of existing) {
-    await exec.exec(`ALTER TABLE ${table} OWNER TO ${APP_ROLE}`)
+    await exec.exec(`ALTER TABLE ${schema}.${table} OWNER TO ${APP_ROLE}`)
   }
 
   // Policy (re)creation must run as the owner; the DB owner is a member of
@@ -184,34 +348,41 @@ export async function hardenRls(exec: SqlExecutor): Promise<void> {
   await exec.exec(`BEGIN`)
   await exec.exec(`SET LOCAL ROLE ${APP_ROLE}`)
   for (const table of existing) {
-    await exec.exec(`DROP POLICY IF EXISTS tenant_isolation ON ${table}`)
+    await exec.exec(`DROP POLICY IF EXISTS tenant_isolation ON ${schema}.${table}`)
     await exec.exec(
-      `CREATE POLICY tenant_isolation ON ${table} FOR ALL
+      `CREATE POLICY tenant_isolation ON ${schema}.${table} FOR ALL
        USING (tenant_id = current_setting('app.current_tenant', true)::uuid)
        WITH CHECK (tenant_id = current_setting('app.current_tenant', true)::uuid)`,
     )
     // Creating a policy does not enable RLS; the base DDL does that for its own
     // tables, but phase-2/EXTRA_DDL tables need it here (idempotent).
-    await exec.exec(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`)
-    await exec.exec(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`)
+    await exec.exec(`ALTER TABLE ${schema}.${table} ENABLE ROW LEVEL SECURITY`)
+    await exec.exec(`ALTER TABLE ${schema}.${table} FORCE ROW LEVEL SECURITY`)
     if (table === 'audit_logs') {
       // Keep the audit trail append-only even for its owner.
-      await exec.exec(`REVOKE UPDATE, DELETE ON audit_logs FROM ${APP_ROLE}`)
+      await exec.exec(`REVOKE UPDATE, DELETE ON ${schema}.audit_logs FROM ${APP_ROLE}`)
     }
   }
   await exec.exec(`COMMIT`)
 
   // Global (non-tenant-scoped) tables stay owned by the bootstrap superuser.
-  await exec.exec(`GRANT SELECT ON tenants, permissions, role_permissions TO ${APP_ROLE}`)
+  // Only relevant in the shared schema: the dedicated schema holds no
+  // `tenants`/`permissions` copies, and its `role_permissions` is owned by
+  // the app role already (explicitly re-owned during materialization).
+  if (schemaName === 'public') {
+    await exec.exec(`GRANT SELECT ON tenants, permissions, role_permissions TO ${APP_ROLE}`)
+  }
 }
 
 /** True once RLS hardening has been applied (all tenant tables owned by the app role). */
-export async function isHardeningApplied(exec: SqlExecutor): Promise<boolean> {
+export async function isHardeningApplied(exec: SqlExecutor, schemaName = 'public'): Promise<boolean> {
+  assertSchemaName(schemaName)
   const res = await exec.query<{ hardened: boolean }>(
     `SELECT c.relowner = r.oid AS hardened
      FROM pg_class c, pg_roles r
-     WHERE c.relname = 'employees' AND c.relnamespace = 'public'::regnamespace
+     WHERE c.relname = 'employees' AND c.relnamespace = $1::regnamespace
        AND r.rolname = '${APP_ROLE}'`,
+    [schemaName],
   )
   return res.rows[0]?.hardened ?? false
 }

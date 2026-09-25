@@ -5,6 +5,7 @@ import { httpError } from '../../http/errors.js'
 import { newOpaqueToken, scryptHash, scryptVerify, sha256Hex } from '../../lib/crypto.js'
 import { parseDuration } from '../../lib/duration.js'
 import * as repo from './auth.repo.js'
+import * as ssoRepo from '../sso/sso.repo.js'
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -25,10 +26,30 @@ export function registerAuthRoutes(fastify: FastifyInstance): void {
     if (!body.success) throw httpError.badRequest('Invalid login payload', body.error.flatten())
     const { email, password, tenantSubdomain } = body.data
 
-    const result = await db.system(async (q) => {
-      const tenant = await repo.findTenantBySubdomain(q, tenantSubdomain)
-      if (!tenant || tenant.status !== 'active') throw httpError.unauthorized('Invalid credentials')
+    // Phase 1 — tenancy resolution (shared `public` only).
+    const tenant = await db.system(async (q) => {
+      const t = await repo.findTenantBySubdomain(q, tenantSubdomain)
+      if (!t || t.status !== 'active') throw httpError.unauthorized('Invalid credentials')
+      return t
+    })
 
+    // enforceSso check: if the tenant has SSO enabled with enforceSso=true, reject password login
+    const ssoConfig = await db.system(async (q) => ssoRepo.getSsoConfig(q, tenant.id))
+    if (ssoConfig?.ssoConfigJson) {
+      const { parseSsoConfig } = await import('../sso/sso.config.js')
+      const parsed = parseSsoConfig(ssoConfig.ssoConfigJson as Record<string, unknown>)
+      if (parsed.enforceSso) {
+        throw httpError.forbidden(
+          'Password login is disabled for this tenant. Please use SSO authentication.',
+        )
+      }
+    }
+
+    // Phase 2 — credential + role resolution. A dedicated tenant resolves the
+    // user/roles/permissions from its OWN schema (post-cutover the shared
+    // `public` copy is purged), via search_path scoping.
+    const scoped = tenant.isolationMode === 'dedicated_schema' ? { schema: tenant.dedicatedSchema! } : undefined
+    const result = await db.system(async (q) => {
       const user = await repo.findUserByEmail(q, tenant.id, email)
       if (!user || user.status !== 'active') throw httpError.unauthorized('Invalid credentials')
 
@@ -49,16 +70,18 @@ export function registerAuthRoutes(fastify: FastifyInstance): void {
         sha256Hex(refreshToken),
         new Date(Date.now() + config.refreshExpiresDays * 86_400_000),
       )
-      return { tenant, user, roles, permissions, refreshToken }
-    })
+      return { user, roles, permissions, refreshToken }
+    }, scoped)
 
     const token = fastify.jwt.sign(
       {
         sub: result.user.id,
-        tenant: result.tenant.id,
+        tenant: tenant.id,
         employeeId: result.user.employeeId,
         roles: result.roles,
         permissions: result.permissions,
+        isolationMode: tenant.isolationMode,
+        tenantSchema: tenant.isolationMode === 'dedicated_schema' ? (tenant.dedicatedSchema ?? undefined) : undefined,
       },
       { expiresIn: config.jwtExpires },
     )
@@ -75,14 +98,20 @@ export function registerAuthRoutes(fastify: FastifyInstance): void {
     if (!body.success) throw httpError.badRequest('Invalid refresh payload', body.error.flatten())
     const tokenHash = sha256Hex(body.data.refreshToken)
 
-    const result = await db.system(async (q) => {
-      const token = await repo.findRefreshToken(q, tokenHash)
-      if (!token || token.revokedAt || new Date(token.expiresAt) < new Date()) {
+    // Phase 1 — token + tenancy resolution (shared `public` only).
+    const { token, tenant } = await db.system(async (q) => {
+      const t = await repo.findRefreshToken(q, tokenHash)
+      if (!t || t.revokedAt || new Date(t.expiresAt) < new Date()) {
         throw httpError.unauthorized('Refresh token is invalid or expired')
       }
-      const tenant = await repo.findTenantById(q, token.tenantId)
-      if (!tenant || tenant.status !== 'active') throw httpError.unauthorized('Tenant is not active')
+      const tenantRow = await repo.findTenantById(q, t.tenantId)
+      if (!tenantRow || tenantRow.status !== 'active') throw httpError.unauthorized('Tenant is not active')
+      return { token: t, tenant: tenantRow }
+    })
 
+    // Phase 2 — rotate against the tenant's authoritative schema.
+    const scoped = tenant.isolationMode === 'dedicated_schema' ? { schema: tenant.dedicatedSchema! } : undefined
+    const result = await db.system(async (q) => {
       const user = await repo.findUserById(q, token.tenantId, token.userId)
       if (!user || user.status !== 'active') throw httpError.unauthorized('User is not active')
 
@@ -102,16 +131,18 @@ export function registerAuthRoutes(fastify: FastifyInstance): void {
         new Date(Date.now() + config.refreshExpiresDays * 86_400_000),
       )
 
-      return { tenant, user, roles, permissions, refreshToken }
-    })
+      return { user, roles, permissions, refreshToken }
+    }, scoped)
 
     const accessToken = fastify.jwt.sign(
       {
         sub: result.user.id,
-        tenant: result.tenant.id,
+        tenant: token.tenantId,
         employeeId: result.user.employeeId,
         roles: result.roles,
         permissions: result.permissions,
+        isolationMode: tenant.isolationMode,
+        tenantSchema: tenant.isolationMode === 'dedicated_schema' ? (tenant.dedicatedSchema ?? undefined) : undefined,
       },
       { expiresIn: config.jwtExpires },
     )

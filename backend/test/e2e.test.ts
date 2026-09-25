@@ -4,6 +4,7 @@ import { Db } from '../src/db/index.js'
 import { buildApp } from '../src/http/app.js'
 import { loadConfig, loadEnvFile } from '../src/config.js'
 import { resetDemoLeaveState, seedDatabase, SEED } from '../src/seed/seed.js'
+import { warmUpDb } from './warmup.js'
 
 loadEnvFile()
 
@@ -33,6 +34,7 @@ beforeAll(async () => {
   if (!config.databaseUrl) {
     throw new Error('DATABASE_URL is required to run the suite — see .env.example')
   }
+  await warmUpDb(config.databaseUrl)
   db = await Db.open({
     connectionString: config.databaseUrl,
     max: config.dbPoolSize,

@@ -6,6 +6,10 @@ export interface TenantRow {
   subdomain: string
   plan: string
   status: string
+  /** 'shared' | 'dedicated_schema' — set once the Phase 5 tier has flipped. */
+  isolationMode: string
+  /** The tenant's dedicated schema name when isolationMode === 'dedicated_schema'. */
+  dedicatedSchema: string | null
 }
 
 export interface UserAuthRow {
@@ -28,7 +32,9 @@ export interface RefreshTokenRow {
 
 export async function findTenantBySubdomain(q: Q, subdomain: string): Promise<TenantRow | null> {
   const { rows } = await q.query<TenantRow>(
-    `SELECT id, name, subdomain, plan, status
+    `SELECT id, name, subdomain, plan, status,
+            isolation_mode AS "isolationMode",
+            dedicated_schema AS "dedicatedSchema"
      FROM tenants
      WHERE lower(subdomain) = lower($1) AND deleted_at IS NULL`,
     [subdomain],
@@ -38,7 +44,9 @@ export async function findTenantBySubdomain(q: Q, subdomain: string): Promise<Te
 
 export async function findTenantById(q: Q, id: string): Promise<TenantRow | null> {
   const { rows } = await q.query<TenantRow>(
-    `SELECT id, name, subdomain, plan, status
+    `SELECT id, name, subdomain, plan, status,
+            isolation_mode AS "isolationMode",
+            dedicated_schema AS "dedicatedSchema"
      FROM tenants
      WHERE id = $1 AND deleted_at IS NULL`,
     [id],
@@ -89,6 +97,10 @@ export async function touchLastLogin(q: Q, userId: string): Promise<void> {
   await q.exec(`UPDATE user_accounts SET last_login_at = now() WHERE id = $1`, [userId])
 }
 
+// refresh_tokens is PUBLIC-qualified everywhere: the auth flow deliberately
+// runs tenant-scoped reads against the dedicated schema (post-cutover), but
+// the token ledger itself always lives in the shared `public` schema so this
+// session's rotation is not per-tenant.
 export async function insertRefreshToken(
   q: Q,
   tenantId: string,
@@ -97,7 +109,7 @@ export async function insertRefreshToken(
   expiresAt: Date,
 ): Promise<void> {
   await q.exec(
-    `INSERT INTO refresh_tokens (id, tenant_id, user_id, token_hash, expires_at)
+    `INSERT INTO public.refresh_tokens (id, tenant_id, user_id, token_hash, expires_at)
      VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
     [tenantId, userId, tokenHash, expiresAt],
   )
@@ -107,7 +119,7 @@ export async function findRefreshToken(q: Q, tokenHash: string): Promise<Refresh
   const { rows } = await q.query<RefreshTokenRow>(
     `SELECT id, user_id AS "userId", tenant_id AS "tenantId",
             expires_at::text AS "expiresAt", revoked_at::text AS "revokedAt"
-     FROM refresh_tokens
+     FROM public.refresh_tokens
      WHERE token_hash = $1`,
     [tokenHash],
   )
@@ -115,7 +127,7 @@ export async function findRefreshToken(q: Q, tokenHash: string): Promise<Refresh
 }
 
 export async function revokeRefreshToken(q: Q, id: string): Promise<void> {
-  await q.exec(`UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1`, [id])
+  await q.exec(`UPDATE public.refresh_tokens SET revoked_at = now() WHERE id = $1`, [id])
 }
 
 export async function findUserById(q: Q, tenantId: string, userId: string): Promise<UserAuthRow | null> {

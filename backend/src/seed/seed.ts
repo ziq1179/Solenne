@@ -47,6 +47,30 @@ export const SEED = {
   // Phase 2 — Billing subscriptions (one per demo tenant).
   SUB_ACME: '3c000000-0000-4000-8000-000000000001',
   SUB_GLOBEX: '3c000000-0000-4000-8000-000000000002',
+
+  // Phase 4 — Performance Management seed data (Acme).
+  PERF_CYCLE_Q3: '4d000000-0000-4000-8000-000000000001',
+  PERF_CYCLE_DRAFT: '4d000000-0000-4000-8000-000000000002',
+  PERF_GOAL_AISHA_1: '5e000000-0000-4000-8000-000000000001',
+  PERF_GOAL_AISHA_2: '5e000000-0000-4000-8000-000000000002',
+  PERF_GOAL_PRIYA_1: '5e000000-0000-4000-8000-000000000003',
+  PERF_GOAL_MARCUS_1: '5e000000-0000-4000-8000-000000000004',
+  PERF_REVIEW_AISHA: '6f000000-0000-4000-8000-000000000001',
+  PERF_REVIEW_PRIYA: '6f000000-0000-4000-8000-000000000002',
+  PERF_FEEDBACK_1: '7a000000-0000-4000-8000-000000000001',
+  PERF_FEEDBACK_2: '7a000000-0000-4000-8000-000000000002',
+
+  // Phase 4 — Benefits Administration seed data (Acme).
+  BEN_PLAN_MEDICAL: '8b000000-0000-4000-8000-000000000001',
+  BEN_PLAN_DENTAL: '8b000000-0000-4000-8000-000000000002',
+  BEN_PERIOD_OPEN: '9c000000-0000-4000-8000-000000000001',
+  BEN_PERIOD_CLOSED: '9c000000-0000-4000-8000-000000000002',
+  BEN_ENROLLMENT_AISHA: 'ad000000-0000-4000-8000-000000000001',
+  BEN_DEPENDENT_AISHA_SPOUSE: 'be000000-0000-4000-8000-000000000001',
+  BEN_LIFE_EVENT_AISHA: 'cf000000-0000-4000-8000-000000000001',
+
+  // Phase 4 — Integration Hub seed data (Acme).
+  INT_SLACK_WEBHOOK: 'da000000-0000-4000-8000-000000000001',
 } as const
 
 interface SeedUser {
@@ -385,7 +409,15 @@ async function seedGlobex(q: Q): Promise<void> {
     `INSERT INTO leave_balances (id, tenant_id, employee_id, leave_type_id, year, accrued_days, used_days, carried_over_days)
      VALUES (gen_random_uuid(), $1, $2, $3, 2026, 20, 0, 0)
      ON CONFLICT DO NOTHING`,
-    [SEED.TENANT_GLOBEX, SEED.EMP_GLOBEX, SEED.LEAVE_ANNUAL_GLOBEX],
+     [SEED.TENANT_GLOBEX, SEED.EMP_GLOBEX, SEED.LEAVE_ANNUAL_GLOBEX],
+  )
+
+  // Compensation record for the globex employee (needed for payroll seeding)
+  await q.exec(
+    `INSERT INTO compensation_records (id, tenant_id, employee_id, effective_date, base_salary_amount, currency, pay_frequency, change_reason)
+     VALUES (gen_random_uuid(), $1, $2, '2022-02-14', 86400.00, 'USD', 'monthly', 'hire')
+     ON CONFLICT DO NOTHING`,
+    [SEED.TENANT_GLOBEX, SEED.EMP_GLOBEX],
   )
 }
 
@@ -405,6 +437,201 @@ async function seedBilling(q: Q): Promise<void> {
   )
 }
 
+async function seedPayroll(q: Q): Promise<void> {
+  // Seed a paid payroll run for globex (July 2026) with a payslip for the globex employee
+  await q.exec(
+    `INSERT INTO payroll_runs (id, tenant_id, period_start, period_end, status, total_gross, total_net, total_deductions, employee_count, currency, paid_at, created_by)
+     VALUES ($1, $2, '2026-07-01', '2026-07-31', 'paid', 7200.00, 5139.40, 2060.60, 1, 'USD', '2026-08-05 00:00:00+00', (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1))
+     ON CONFLICT (tenant_id, period_start, period_end) DO NOTHING`,
+    ['a0000000-0000-4000-8000-000000000001', SEED.TENANT_GLOBEX],
+  )
+  await q.exec(
+    `INSERT INTO payslips (id, tenant_id, payroll_run_id, employee_id, compensation_record_id, base_pay, gross_pay, deductions, total_deductions, net_pay, currency, tax_compliant)
+     SELECT gen_random_uuid(), $2, $1, cr.employee_id, cr.id, 7200.00, 7200.00,
+            '[{"name":"Federal income tax","amount":1080.00},{"name":"FICA","amount":554.40},{"name":"State tax","amount":426.20}]'::jsonb,
+            2060.60, 5139.40, 'USD', false
+     FROM compensation_records cr
+     WHERE cr.tenant_id = $2 AND cr.employee_id = $3
+     ON CONFLICT DO NOTHING`,
+    ['a0000000-0000-4000-8000-000000000001', SEED.TENANT_GLOBEX, SEED.EMP_GLOBEX],
+  )
+  // Seed a draft run for August 2026 (current month, not yet calculated)
+  await q.exec(
+    `INSERT INTO payroll_runs (id, tenant_id, period_start, period_end, status, currency, created_by)
+     VALUES ($1, $2, '2026-08-01', '2026-08-31', 'draft', 'USD', (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1))
+     ON CONFLICT (tenant_id, period_start, period_end) DO NOTHING`,
+    ['a0000000-0000-4000-8000-000000000002', SEED.TENANT_GLOBEX],
+  )
+}
+
+async function seedPerformance(q: Q): Promise<void> {
+  // Ensure the unique constraint exists (may not be present on older databases)
+  await q.exec(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_cycle_name') THEN
+      ALTER TABLE review_cycles ADD CONSTRAINT unique_cycle_name UNIQUE (tenant_id, name);
+    END IF;
+  END $$`)
+
+  // Review cycles — one active (collecting), one draft
+  await q.exec(
+    `INSERT INTO review_cycles (id, tenant_id, name, status, starts_at, ends_at, review_deadline, created_by)
+     VALUES
+       ($1, $2, 'Q3 2026', 'collecting', '2026-07-01', '2026-09-30', '2026-10-15',
+        (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1)),
+       ($3, $2, 'Q4 2026', 'draft', '2026-10-01', '2026-12-31', NULL,
+        (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1))
+     ON CONFLICT (tenant_id, name) DO NOTHING`,
+    [SEED.PERF_CYCLE_Q3, SEED.TENANT_ACME, SEED.PERF_CYCLE_DRAFT],
+  )
+
+  // Goals — Aisha has 2, Priya has 1, Marcus has 1
+  await q.exec(
+    `INSERT INTO goals (id, tenant_id, employee_id, title, description, category, goal_type, percentage, status, due_date, created_by)
+     VALUES
+       ($1, $2, $3, 'Ship onboarding redesign', 'Complete the new onboarding flow', 'design', 'okr', 90, 'active', '2026-09-30', $4),
+       ($5, $2, $3, 'Mentor two junior designers', 'Provide weekly 1:1s and portfolio reviews', 'growth', 'okr', 60, 'active', NULL, $4),
+       ($6, $2, $7, 'Launch design system v2', 'Publish updated component library', 'design', 'okr', 75, 'active', '2026-09-30', $8),
+       ($9, $2, $10, 'Reduce support handoff time', 'Streamline cross-team processes', 'cross-team', 'kpi', 45, 'active', '2026-10-15', $11)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      SEED.PERF_GOAL_AISHA_1, SEED.TENANT_ACME, SEED.EMP_AISHA, SEED.USER_AISHA,
+      SEED.PERF_GOAL_AISHA_2,
+      SEED.PERF_GOAL_PRIYA_1, SEED.EMP_PRIYA, SEED.USER_PRIYA,
+      SEED.PERF_GOAL_MARCUS_1, SEED.EMP_MARCUS, SEED.USER_ADMIN,
+    ],
+  )
+
+  // Map Aisha's goals to Q3 cycle
+  await q.exec(
+    `INSERT INTO cycle_goals (id, tenant_id, cycle_id, goal_id)
+     VALUES
+       (gen_random_uuid(), $1, $2, $3),
+       (gen_random_uuid(), $1, $2, $4)
+     ON CONFLICT (cycle_id, goal_id) DO NOTHING`,
+    [SEED.TENANT_ACME, SEED.PERF_CYCLE_Q3, SEED.PERF_GOAL_AISHA_1, SEED.PERF_GOAL_AISHA_2],
+  )
+
+  // Performance reviews — Aisha has one with self+manager review (not finalized)
+  // Priya has one (draft only)
+  await q.exec(
+    `INSERT INTO performance_reviews
+       (id, tenant_id, cycle_id, employee_id,
+        self_rating, self_comment, self_submitted_at,
+        manager_id, manager_rating, manager_comment, manager_submitted_at,
+        status)
+     VALUES
+       ($1, $2, $3, $4,
+        4, 'Strong quarter, shipped on time', now() - interval '2 days',
+        $5, 5, 'Exceptional work on the redesign', now() - interval '1 day',
+        'manager_reviewing'),
+       ($6, $2, $3, $5,
+        NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL,
+        'draft')
+     ON CONFLICT (cycle_id, employee_id) DO NOTHING`,
+    [SEED.PERF_REVIEW_AISHA, SEED.TENANT_ACME, SEED.PERF_CYCLE_Q3, SEED.EMP_AISHA, SEED.EMP_PRIYA, SEED.PERF_REVIEW_PRIYA],
+  )
+
+  // Feedback — Priya → Aisha (coaching), Marcus → Aisha (kudos)
+  await q.exec(
+    `INSERT INTO feedback_entries (id, tenant_id, author_id, recipient_id, content, feedback_type)
+     VALUES
+       ($1, $2, $3, $4, 'Great job leading the redesign sprint', 'coaching'),
+       ($5, $2, $6, $4, 'Thanks for the design system review', 'kudos')
+     ON CONFLICT (id) DO NOTHING`,
+    [SEED.PERF_FEEDBACK_1, SEED.TENANT_ACME, SEED.EMP_PRIYA, SEED.EMP_AISHA, SEED.PERF_FEEDBACK_2, SEED.EMP_MARCUS],
+  )
+}
+
+async function seedBenefits(q: Q): Promise<void> {
+  // Benefit plans — medical (with tiers) and dental
+  await q.exec(
+    `INSERT INTO benefit_plans
+       (id, tenant_id, name, description, plan_type, carrier_name,
+        coverage_tiers, employer_contribution_pct, employee_cost, created_by)
+     VALUES
+       ($1, $2, 'Blue Cross PPO', 'Comprehensive medical coverage', 'medical', 'Blue Cross',
+        '{"employee_only","employee_spouse","employee_child","family"}', 70.00,
+        '{"employee_only": 250.00, "employee_spouse": 500.00, "employee_child": 400.00, "family": 800.00}'::jsonb,
+        (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1)),
+       ($3, $2, 'Delta Dental', 'Standard dental coverage', 'dental', 'Delta Dental',
+        '{"employee_only","employee_spouse","employee_child","family"}', 50.00,
+        '{"employee_only": 30.00, "employee_spouse": 60.00, "employee_child": 50.00, "family": 100.00}'::jsonb,
+        (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1))
+     ON CONFLICT (id) DO NOTHING`,
+    [SEED.BEN_PLAN_MEDICAL, SEED.TENANT_ACME, SEED.BEN_PLAN_DENTAL],
+  )
+
+  // Enrollment periods — one active, one closed
+  await q.exec(
+    `INSERT INTO enrollment_periods
+       (id, tenant_id, name, description, period_type, status, starts_at, ends_at, coverage_starts, created_by)
+     VALUES
+       ($1, $2, 'Q4 2026 Open Enrollment', 'Annual open enrollment for 2027 coverage', 'open_enrollment', 'active',
+        '2026-10-01T00:00:00Z', '2026-10-31T23:59:59Z', '2027-01-01',
+        (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1)),
+       ($3, $2, 'Q3 2026 Open Enrollment', 'Past enrollment period', 'open_enrollment', 'closed',
+        '2026-07-01T00:00:00Z', '2026-07-31T23:59:59Z', '2026-10-01',
+        (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1))
+     ON CONFLICT (id) DO NOTHING`,
+    [SEED.BEN_PERIOD_OPEN, SEED.TENANT_ACME, SEED.BEN_PERIOD_CLOSED],
+  )
+
+  // Dependent for Aisha (spouse)
+  await q.exec(
+    `INSERT INTO benefit_dependents
+       (id, tenant_id, employee_id, first_name, last_name, relationship, date_of_birth, is_active)
+     VALUES ($1, $2, $3, 'Omar', 'Khan', 'spouse', '1992-05-15', true)
+     ON CONFLICT (id) DO NOTHING`,
+    [SEED.BEN_DEPENDENT_AISHA_SPOUSE, SEED.TENANT_ACME, SEED.EMP_AISHA],
+  )
+
+  // Enrollment for Aisha in the open period (submitted)
+  await q.exec(
+    `INSERT INTO benefit_enrollments
+       (id, tenant_id, employee_id, enrollment_period_id, benefit_plan_id,
+        coverage_tier, employee_premium, employer_premium, status, submitted_at, created_by)
+     VALUES ($1, $2, $3, $4, $5, 'employee_spouse', 500.00, 500.00, 'submitted', now(),
+        (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1))
+     ON CONFLICT (employee_id, enrollment_period_id, benefit_plan_id) DO NOTHING`,
+    [SEED.BEN_ENROLLMENT_AISHA, SEED.TENANT_ACME, SEED.EMP_AISHA, SEED.BEN_PERIOD_OPEN, SEED.BEN_PLAN_MEDICAL],
+  )
+
+  // Link Aisha's spouse to the enrollment
+  await q.exec(
+    `INSERT INTO enrollment_dependents (id, tenant_id, enrollment_id, dependent_id)
+     VALUES (gen_random_uuid(), $1, $2, $3)
+     ON CONFLICT (enrollment_id, dependent_id) DO NOTHING`,
+    [SEED.TENANT_ACME, SEED.BEN_ENROLLMENT_AISHA, SEED.BEN_DEPENDENT_AISHA_SPOUSE],
+  )
+
+  // Life event for Aisha (reported, not yet acknowledged)
+  await q.exec(
+    `INSERT INTO life_events
+       (id, tenant_id, employee_id, event_type, event_date, description, status)
+     VALUES ($1, $2, $3, 'marriage', '2026-09-01', 'Recently married', 'reported')
+     ON CONFLICT (id) DO NOTHING`,
+     [SEED.BEN_LIFE_EVENT_AISHA, SEED.TENANT_ACME, SEED.EMP_AISHA],
+  )
+}
+
+async function seedIntegrationHub(q: Q): Promise<void> {
+  // Slack webhook connection — uses a placeholder webhook URL for demo.
+  // In production this would be a real Slack incoming webhook URL.
+  const maskedPreview = 'https://hooks.slack.com/services/T00000/B00000/****'
+  const placeholderEnc = '00'.repeat(12) + ':' + '00'.repeat(32) + ':' + '00'.repeat(16) + ':' + '00'.repeat(12) + ':' + '00'.repeat(32) + ':' + '00'.repeat(16)
+
+  await q.exec(
+    `INSERT INTO integration_connections
+       (id, tenant_id, provider, label, credential_enc, masked_preview, key_version, status, config_json, created_by)
+     VALUES ($1, $2, 'slack_webhook', 'Acme #general notifications', $3, $4, 1, 'disconnected',
+       '{"channel": "#general"}'::jsonb,
+       (SELECT id FROM user_accounts WHERE tenant_id = $2 LIMIT 1))
+     ON CONFLICT (id) DO NOTHING`,
+    [SEED.INT_SLACK_WEBHOOK, SEED.TENANT_ACME, placeholderEnc, maskedPreview],
+  )
+}
+
 async function seedAll(db: Db): Promise<void> {
   await db.system(async (q) => {
     await seedAcme(q)
@@ -412,6 +639,10 @@ async function seedAll(db: Db): Promise<void> {
     await seedAts(q)
     await seedOnboarding(q)
     await seedBilling(q)
+    await seedPayroll(q)
+    await seedPerformance(q)
+    await seedBenefits(q)
+    await seedIntegrationHub(q)
   })
 }
 
@@ -427,6 +658,10 @@ export async function seedDatabase(db: Db): Promise<void> {
     await seedAts(q)
     await seedOnboarding(q)
     await seedBilling(q)
+    await seedPayroll(q)
+    await seedPerformance(q)
+    await seedBenefits(q)
+    await seedIntegrationHub(q)
     // Fast path: neon-pooler round trips are slow; skip once fully seeded.
     const existing = await q.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM employees WHERE tenant_id = ANY($1::uuid[])`,
@@ -501,6 +736,10 @@ export async function resetDemoLeaveState(db: Db): Promise<void> {
     await seedAts(q)
     await seedOnboarding(q)
     await seedBilling(q)
+    await seedPayroll(q)
+    await seedPerformance(q)
+    await seedBenefits(q)
+    await seedIntegrationHub(q)
   })
 }
 

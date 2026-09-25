@@ -9,6 +9,15 @@ export interface AuthClaims {
   employeeId: string | null
   roles: string[]
   permissions: string[]
+  /** 'shared' | 'dedicated_schema' — from the tenants row at login. */
+  isolationMode?: string
+  /**
+   * The dedicated schema name when isolationMode === 'dedicated_schema'.
+   * Absent for pre-cutover tokens (they still resolve against `public`),
+   * always present once cutover has flipped the tenants row — those tokens
+   * route into the tenant's own copy via the search_path line below.
+   */
+  tenantSchema?: string
 }
 
 export interface RequestContext {
@@ -58,6 +67,15 @@ export async function authenticate(req: FastifyRequest, _reply: FastifyReply): P
   if (typeof claims.sub !== 'string' || claims.sub === '' || typeof claims.tenant !== 'string' || claims.tenant === '') {
     throw httpError.unauthorized('Token is missing required claims')
   }
+  // Route a dedicated tenant's transaction to its own physical copy: remember
+  // the schema derived from the verified JWT. db.tenant() prefixes `search_path`
+  // with it per request. Zero-cost in-memory registry; never a DB round trip.
+  req.server.db.setTenantSchema(
+    claims.tenant,
+    claims.isolationMode === 'dedicated_schema' && typeof claims.tenantSchema === 'string'
+      ? claims.tenantSchema
+      : null,
+  )
   req.ctx = {
     userId: claims.sub,
     tenantId: claims.tenant,

@@ -1,5 +1,5 @@
 import { Pool, type PoolClient } from 'pg'
-import { applyAtsSchema, applyBaseSchema, applyBillingSchema, applyNotificationsSchema, applyOnboardingSchema, ensureMigrationTable, isHardeningApplied, isPhase2Applied, isSchemaApplied, markPhase2Applied, APP_ROLE, hardenRls, type SqlExecutor } from './schema.js'
+import { applyAtsSchema, applyBaseSchema, applyBillingSchema, applyNotificationsSchema, applyOnboardingSchema, applyAiSchema, applyPayrollSchema, applyPerformanceSchema, applyBenefitsSchema, applyIntegrationsSchema, applySsoSchema, applyDedicatedTierSchema, applyDedicatedTierAuthSchema, assertSchemaName, ensureMigrationTable, isHardeningApplied, isPhase2Applied, isSchemaApplied, markPhase2Applied, APP_ROLE, hardenRls, type SqlExecutor } from './schema.js'
 import { ulidSafeUuid, sha256Hex } from '../lib/crypto.js'
 
 export interface PoolOptions {
@@ -25,7 +25,7 @@ export interface Row {
 }
 
 /** Advisory-lock key for the schema bootstrap (arbitrary but stable int8). */
-const MIGRATION_LOCK_KEY = 81972301
+export const MIGRATION_LOCK_KEY = 81972301
 
 function toQ(client: PoolClient): Q {
   return {
@@ -41,6 +41,9 @@ function toQ(client: PoolClient): Q {
 }
 
 export class Db {
+  /** tenantId → dedicated schema name, populated at auth time from the JWT. */
+  private readonly tenantSchemas = new Map<string, string>()
+
   private constructor(private readonly pool: Pool) {}
 
   /** Connects to a real Postgres server and applies schema/RLS hardening if absent. */
@@ -51,7 +54,7 @@ export class Db {
       max: opts.max ?? 16,
       min: 0,
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 60_000,
       ssl,
     })
 
@@ -99,6 +102,14 @@ export class Db {
           ['phase2-onboarding', applyOnboardingSchema],
           ['phase2-notifications', applyNotificationsSchema],
           ['phase2-billing', applyBillingSchema],
+          ['phase3-ai', applyAiSchema],
+          ['phase4-payroll', applyPayrollSchema],
+          ['phase4-performance', applyPerformanceSchema],
+          ['phase4-benefits', applyBenefitsSchema],
+          ['phase4-integrations', applyIntegrationsSchema],
+          ['phase5-sso', applySsoSchema],
+          ['phase5-dedicated-tier', applyDedicatedTierSchema],
+          ['phase5-dedicated-tier-auth', applyDedicatedTierAuthSchema],
         ] as [string, (exec: SqlExecutor) => Promise<void>][]) {
           if (!(await isPhase2Applied(q, name))) {
             await apply(q)
@@ -115,11 +126,31 @@ export class Db {
   }
 
   /**
+   * Records the tenant's routing schema (from the verified JWT, per the
+   * "SET LOCAL comes from the JWT" discipline). `null`/empty clears it back to
+   * the shared `public` routing. Zero-cost in-memory lookup: no per-request DB
+   * round trip on the hot path.
+   */
+  setTenantSchema(tenantId: string, schema: string | null | undefined): void {
+    if (schema) {
+      assertSchemaName(schema)
+      this.tenantSchemas.set(tenantId, schema)
+    } else {
+      this.tenantSchemas.delete(tenantId)
+    }
+  }
+
+  /**
    * Runs `fn` inside a single transaction on one pooled connection, as the
    * non-superuser app role with `app.current_tenant` scoped to that
    * transaction via `SET LOCAL` (auto-reverts at COMMIT/ROLLBACK). Every
    * tenant-scoped query MUST go through here so RLS actually enforces
    * isolation across concurrent requests.
+   *
+   * For a dedicated tenant the session `search_path` is prefixed with its own
+   * schema (registered by `setTenantSchema` at auth time) so every unqualified
+   * reference resolves to the tenant's physical copy; `public` stays second
+   * for the global tables (`tenants`, `permissions`).
    */
   tenant<T>(tenantId: string, fn: (q: Q) => Promise<T>): Promise<T> {
     if (!tenantId || typeof tenantId !== 'string') {
@@ -130,6 +161,10 @@ export class Db {
     return this.transact(async (client) => {
       await client.query(`SET LOCAL ROLE ${APP_ROLE}`)
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenantId])
+      const schema = this.tenantSchemas.get(tenantId)
+      if (schema) {
+        await client.query(`SELECT set_config('search_path', $1, true)`, [`${schema}, public`])
+      }
       return fn(toQ(client))
     })
   }
@@ -137,9 +172,44 @@ export class Db {
   /**
    * Runs `fn` in a transaction as the database owner/superuser (RLS bypassed).
    * Reserved for tenant-agnostic flows: tenancy resolution, login, seed.
+   *
+   * Optional `{ schema }` (assertSchemaName-guarded) re-scopes the transaction's
+   * `search_path` to a tenant schema — the auth flow uses it to resolve a
+   * dedicated tenant's user/roles/permissions from the tenant's own copy
+   * (login/refresh post-purge), while the tenant row itself is always a
+   * `public.tenants` read.
    */
-  system<T>(fn: (q: Q) => Promise<T>): Promise<T> {
-    return this.transact((client) => fn(toQ(client)))
+  system<T>(fn: (q: Q) => Promise<T>, opts?: { schema?: string }): Promise<T> {
+    return this.transact(async (client) => {
+      if (opts?.schema) {
+        assertSchemaName(opts.schema)
+        await client.query(`SELECT set_config('search_path', $1, true)`, [`${opts.schema}, public`])
+      }
+      return fn(toQ(client))
+    })
+  }
+
+  /**
+   * Checks out one pooled connection for the whole of `fn` (DDL + hardening
+   * that must share a session: GRANTs, ownership transfers, SET LOCAL ROLE).
+   * Same discipline `Db.open`'s bootstrap uses. The connection is always
+   * released; a crash mid-pass is safe because the tier machine is
+   * check-then-act and idempotent on retry.
+   */
+  async withBootstrap<T>(fn: (q: SqlExecutor) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect()
+    try {
+      return await fn(toQ(client))
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {
+        // connection may already be broken; nothing else to do
+      }
+      throw err
+    } finally {
+      client.release()
+    }
   }
 
   /** Raw pooled access — used only by bootstrap/migration/seed scripts. */

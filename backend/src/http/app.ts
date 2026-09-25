@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
+import cookie from '@fastify/cookie'
 import type { Db } from '../db/index.js'
 import type { Config } from '../config.js'
 import { registerErrorHandler } from './errors.js'
@@ -14,6 +15,14 @@ import { registerEmployeeRoutes } from '../modules/employees/employees.routes.js
 import { registerLeaveRoutes } from '../modules/leave/leave.routes.js'
 import { registerAttendanceRoutes } from '../modules/attendance/attendance.routes.js'
 import { registerReportRoutes } from '../modules/reports/reports.routes.js'
+import { registerAiRoutes } from '../modules/ai/ai.routes.js'
+import { registerPayrollRoutes } from '../modules/payroll/payroll.routes.js'
+import { registerPerformanceRoutes } from '../modules/performance/performance.routes.js'
+import { registerBenefitsRoutes } from '../modules/benefits/benefits.routes.js'
+import { registerIntegrationsRoutes } from '../modules/integrations/integrations.routes.js'
+import { registerSsoRoutes } from '../modules/sso/sso.routes.js'
+import { registerMigrationRoutes } from '../modules/migrations/migrations.routes.js'
+import { registerQuiescenceGate } from '../modules/migrations/quiescence.js'
 
 function landingPage(): string {
   return `<!doctype html>
@@ -83,9 +92,14 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   fastify.decorate('config', opts.config)
 
   await fastify.register(cors, { origin: true })
+  await fastify.register(cookie)
   await fastify.register(jwt, { secret: opts.config.jwtSecret })
 
   registerErrorHandler(fastify)
+  // The quiescence gate must be registered before the auth routes so the
+  // onRequest hook (JWT-based write pause for mid-migration tenants) runs
+  // ahead of authenticate.
+  registerQuiescenceGate(fastify)
 
   fastify.get('/', async (_req, reply) =>
     reply.type('text/html; charset=utf-8').send(landingPage()),
@@ -106,6 +120,13 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   registerLeaveRoutes(fastify)
   registerAttendanceRoutes(fastify)
   registerReportRoutes(fastify)
+  registerAiRoutes(fastify)
+  registerPayrollRoutes(fastify)
+  registerPerformanceRoutes(fastify)
+  registerBenefitsRoutes(fastify)
+  registerIntegrationsRoutes(fastify)
+  registerSsoRoutes(fastify)
+  registerMigrationRoutes(fastify)
 
   return fastify
 }
