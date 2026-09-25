@@ -4,7 +4,7 @@
    Trellis — a light "paper & ink" ESS.
    Headings: Fraunces (serif) · Body: Inter · Mono: Geist Mono
     Module accents: brass (Core HR) wine (Leave) forest (Payroll)
-       plum (Reports/Performance) cobalt (ESS/Self-Service) teal (Recruitment)
+       plum (Performance) sage (Reports) cobalt (ESS/Self-Service) teal (Recruitment)
        bronze (Billing) — see AUDIT-MODULE-ACCENTS.md for full registry
    ========================================================================== */
 
@@ -53,6 +53,10 @@
   --color-bronze-soft: #a38e72;
   --color-bronze-tint: #f3ede6;
   --color-bronze-ink: #3d3020;
+  --color-sage: #5c6b41;
+  --color-sage-soft: #6f8057;
+  --color-sage-tint: #eef0e5;
+  --color-sage-ink: #2b3220;
 }
 
 body {

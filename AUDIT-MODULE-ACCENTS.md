@@ -14,9 +14,11 @@
 | `teal` | `#2F6F6F` | Recruitment | Concept §2 |
 | `wine` | `#7A3B46` | Leave & Attendance | Concept §3 |
 | `forest` | `#2F5338` | Payroll | Concept §4 (reserved, not yet built) |
-| `plum` | `#5B3C6F` | Reports / Performance | Concept §5 + user decision |
+| `plum` | `#5B3C6F` | Performance | Concept §5 |
 | `cobalt` | `#3B5C8C` | ESS / Self-Service (Dashboard) | Concept §6 |
-| `bronze` | `#8B7355` | Billing | Proposed 7th token — pending approval |
+| `teal` | `#2F6F6F` | Recruitment | Concept §2 |
+| `bronze` | `#8B7355` | Billing | Approved 7th token — implemented |
+| `sage` | `#5C6B41` | Reports | 8th token — resolved 2026-09-25 (ended plum sharing) |
 
 Each token has four variants: base, `-soft` (lighter + desaturated, for hover/secondary), `-tint` (near-white, for card backgrounds), `-ink` (dark, for text on tint backgrounds).
 
@@ -118,25 +120,25 @@ The concept assigns wine to Leave with the rationale: "Wine gives the module war
 
 ---
 
-## 5. Reports (Plum — analytical)
+## 5. Reports (Sage — analytical)
 
 **Route:** `/reports`
-**Accent:** Plum (user decision — Reports is analytical, closer to Performance's spirit than Payroll's forest)
+**Accent:** Sage — resolved 2026-09-25 (see Open Items). Reports previously shared plum with Performance; the flag there is now closed.
 
-The concept assigns forest specifically to Payroll. Reports is the analytical counterpart — headcount breakdowns, attendance summaries, leave balances. Plum's analytical character (concept §5: "reflective rather than clinical, fitting a conversation about growth") fits naturally.
+The concept assigns forest specifically to Payroll and plum to Performance. Reports is neither the statement nor the conversation — it is the long view. Sage sits on the same branch as forest but pulled toward the paper and cooled toward the gray: the color of facts you sit with rather than act on (headcount, attendance, balances), cumulative, patient, deliberately unassertive. Where plum asks *"what should change?"*, sage answers *"what is"*. Its hue (85°) claims the one open band in the palette — between gold (38°) and forest (134°) — so it collides with nothing.
 
 ### Class-by-class
 
 | Element | Classes | Token | Concept reference |
 |---|---|---|---|
-| **Page `h1`** | `text-2xl font-semibold text-plum` | Plum | Module accent on heading — same pattern as other modules |
-| **Stat card** | `className="border-plum-tint"` | Plum-tint border | Subtle module identity on the key metric card |
-| **All CardTitles** | `className="text-plum-soft"` | Plum soft | Section headers in muted plum — **§5:** concept's `.goal-pct { color: var(--plum) }` adapted to section labels |
-| **Table header rows** | `text-plum-soft` on `<tr>` | Plum soft | Column labels in plum — consistent with CardTitle treatment |
+| **Page `h1`** | `text-2xl font-semibold text-sage` | Sage | Module accent on heading — same pattern as other modules |
+| **Stat card** | `className="border-sage-tint"` | Sage-tint border | Subtle module identity on the key metric card |
+| **All CardTitles** | `className="text-sage-soft"` | Sage soft | Section headers in muted sage — adapted from the plum treatment |
+| **Table header rows** | `text-sage-soft` on `<tr>` | Sage soft | Column labels in sage — consistent with CardTitle treatment |
 | Table data rows | `text-slate-*` | Neutral slate | Data is always neutral — correct |
 | Alerts | `tone="sky"` / `tone="amber"` | Semantic | Informational alerts use standard tones — correct |
 
-**Verdict:** Clean. Plum creates a distinct analytical identity without conflicting with Payroll's forest.
+**Verdict:** Clean. Sage gives Reports a distinct analytical identity: green-family but clearly apart from Performance's plum and Payroll's forest, and quiet enough that the neutral data it frames stays the hero.
 
 ---
 
@@ -208,10 +210,10 @@ The concept assigns teal to Recruitment with the rationale: "A pipeline is motio
 
 ---
 
-## 8. Billing (Brass — PROBLEM, proposed bronze)
+## 8. Billing (Bronze — implemented; history of the problem below)
 
 **Route:** `/billing`
-**Accent:** Currently brass — needs replacement
+**Accent:** Bronze `#8B7355` — approved and implemented (see Open Items → Bronze resolution). The section below is retained as the original audit record.
 
 ### Current class-by-class (showing the problem)
 
@@ -265,7 +267,7 @@ This gives Billing its own visual identity that says "financial/administrative" 
 
 ---
 
-## Complete Accent Map (after bronze)
+## Complete Accent Map (after bronze + sage)
 
 | Module | Accent | Source | Meaning |
 |---|---|---|---|
@@ -275,19 +277,26 @@ This gives Billing its own visual identity that says "financial/administrative" 
 | Payroll | Forest `#2E5339` | Concept §4 | Literal, clear — the statement |
 | Performance | Plum `#5B3C6F` | Concept §5 | Reflective — growth |
 | ESS/Dashboard | Cobalt `#3B5C8C` | Concept §6 | Calm workspace — the front door |
-| Billing | Bronze `#8B7355` | Proposed | Settled, durable — the ledger |
-| Reports | Plum `#5B3C6F` | User decision | Analytical — same family as Performance |
+| Billing | Bronze `#8B7355` | Approved 7th | Settled, durable — the ledger |
+| Reports | Sage `#5C6B41` | 8th token | Analytical — the patient view of facts |
+| Assistant | Cobalt `#3B5C8C` | ESS family | Attention/workspace — same calm room as the dashboard |
 | Notifications | None | Cross-cutting | Cobalt for attention signals only |
 
 ---
 
-## Open Items
+## Open Items (resolutions)
 
-### Reports/Performance plum sharing — intentional for now
+### Reports/Performance plum sharing — RESOLVED (2026-09-25)
 
-Reports and Performance currently both use plum (`#5B3C6F`). This is intentional: Performance isn't built yet (Phase 4), and the two modules share an analytical spirit — concept §5 describes plum as "reflective rather than clinical, fitting a conversation about growth," which applies to both.
+The flag raised here is closed. Now that Performance has shipped (Phase 4), Reports has its own dedicated token: **Sage `#5C6B41`** (see §5). It is distinct from Performance's plum (`ΔH ≈ 192°` and a different family) and from every other accent — hue 85° occupies the open band between gold (38°) and forest (134°), at least 43° from its nearest neighbor. Platinum/indigo alternatives were rejected: indigo sits just 27° from cobalt, which would read as a cobalt variant rather than a separate module.
 
-**Flag:** Once Performance ships in Phase 4, Reports will need its own dedicated accent (same pattern as bronze/Billing — a new token that reads as analytical/insightful without conflicting with Performance's reflective plum). Do not silently discover this later; it's a known, tracked decision.
+### Assistant accent — corrected (2026-09-25)
+
+The AI Assistant page was minted with Billing's bronze (heading, user message bubbles, send button) — an unnoticed collision from Phase 3. It has been moved to the **cobalt / ESS** family (matching its tool-trace chips and the dashboard + notifications attention language): the Assistant lives in the same calm workspace it helps you use. Registry and accent map above reflect this.
+
+### Bronze — status updated (2026-09-25)
+
+The bronze token proposed in §8 is now marked **approved and implemented** (Billing uses it end to end). The §8 problem-and-proposal text above is retained as the historical record of the decision alongside this note.
 
 ---
 

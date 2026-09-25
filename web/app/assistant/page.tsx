@@ -64,7 +64,7 @@ export default function AssistantPage() {
   return (
     <RequireAuth>
       <AppShell>
-        <h1 className="mb-4 text-2xl font-semibold text-bronze">HR Assistant</h1>
+        <h1 className="mb-4 text-2xl font-semibold text-cobalt">HR Assistant</h1>
         <p className="mb-6 text-sm text-graphite-soft">
           Ask about leave balances, attendance, company policies, or org structure.
         </p>
@@ -95,7 +95,7 @@ export default function AssistantPage() {
                 <div
                   className={`max-w-[80%] rounded-xl px-4 py-3 text-sm ${
                     msg.role === 'user'
-                      ? 'bg-bronze text-paper'
+                      ? 'bg-cobalt text-paper'
                       : 'bg-paper border border-line text-ink'
                   }`}
                 >
@@ -116,12 +116,12 @@ export default function AssistantPage() {
             onKeyDown={handleKeyDown}
             placeholder="Ask a question..."
             disabled={loading}
-            className="flex-1 rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink placeholder:text-graphite-faint focus:border-bronze focus:outline-none"
+            className="flex-1 rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink placeholder:text-graphite-faint focus:border-cobalt focus:outline-none"
           />
           <Button
             onClick={handleSend}
             disabled={loading || !input.trim()}
-            className="bg-bronze text-paper hover:bg-bronze-soft rounded-xl px-6"
+            className="bg-cobalt text-paper hover:bg-cobalt-soft rounded-xl px-6"
           >
             {loading ? 'Thinking...' : 'Send'}
           </Button>

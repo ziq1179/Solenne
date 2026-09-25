@@ -33,7 +33,7 @@ export default function ReportsPage() {
   return (
     <RequireAuth>
       <AppShell>
-        <h1 className="mb-6 text-2xl font-semibold text-plum">Reports</h1>
+        <h1 className="mb-6 text-2xl font-semibold text-sage">Reports</h1>
 
         {!canReport ? (
           <Alert tone="amber">
@@ -46,9 +46,9 @@ export default function ReportsPage() {
                 <Spinner />
               ) : headcount.data ? (
                 <>
-                  <Stat label="Total employees" value={headcount.data.total} className="border-plum-tint" />
+                  <Stat label="Total employees" value={headcount.data.total} className="border-sage-tint" />
                   <Card>
-                    <CardTitle className="text-plum-soft">By department</CardTitle>
+                    <CardTitle className="text-sage-soft">By department</CardTitle>
                     <ul className="space-y-1.5">
                       {headcount.data.byDepartment.map((r) => (
                         <li key={r.name} className="flex justify-between text-sm">
@@ -59,7 +59,7 @@ export default function ReportsPage() {
                     </ul>
                   </Card>
                   <Card>
-                    <CardTitle className="text-plum-soft">By location</CardTitle>
+                    <CardTitle className="text-sage-soft">By location</CardTitle>
                     <ul className="space-y-1.5">
                       {headcount.data.byLocation.map((r) => (
                         <li key={r.name} className="flex justify-between text-sm">
@@ -76,7 +76,7 @@ export default function ReportsPage() {
             </div>
 
             <Card>
-              <CardTitle className="text-plum-soft">Attendance summary</CardTitle>
+              <CardTitle className="text-sage-soft">Attendance summary</CardTitle>
               <div className="mb-4 flex flex-wrap gap-3">
                 <div>
                   <Label>From</Label>
@@ -93,7 +93,7 @@ export default function ReportsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wider text-plum-soft">
+                      <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wider text-sage-soft">
                         <th className="pb-2 pr-4 font-medium">Employee</th>
                         <th className="pb-2 pr-4 font-medium">Department</th>
                         <th className="pb-2 pr-4 font-medium">Clock-ins</th>
@@ -130,7 +130,7 @@ export default function ReportsPage() {
             </Card>
 
             <Card>
-              <CardTitle className="text-plum-soft">Leave summary</CardTitle>
+              <CardTitle className="text-sage-soft">Leave summary</CardTitle>
               <div className="mb-4 flex items-end gap-3">
                 <div>
                   <Label>Year</Label>
@@ -143,7 +143,7 @@ export default function ReportsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wider text-plum-soft">
+                      <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wider text-sage-soft">
                         <th className="pb-2 pr-4 font-medium">Employee</th>
                         <th className="pb-2 pr-4 font-medium">Type</th>
                         <th className="pb-2 pr-4 font-medium">Accrued</th>
