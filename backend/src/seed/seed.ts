@@ -471,9 +471,25 @@ export async function resetDemoLeaveState(db: Db): Promise<void> {
        DELETE FROM usage_events         WHERE tenant_id = ANY(${DEMO_TENANTS});
        DELETE FROM subscriptions        WHERE tenant_id = ANY(${DEMO_TENANTS});
        DELETE FROM onboarding_plans     WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM onboarding_template_tasks WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM onboarding_templates WHERE tenant_id = ANY(${DEMO_TENANTS});
        DELETE FROM job_openings         WHERE tenant_id = ANY(${DEMO_TENANTS});
        DELETE FROM employment_history   WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM payslips             WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM payroll_runs         WHERE tenant_id = ANY(${DEMO_TENANTS});
        DELETE FROM compensation_records WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM enrollment_dependents WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM benefit_enrollments  WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM life_events          WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM benefit_dependents   WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM enrollment_periods   WHERE tenant_id = ANY(${DEMO_TENANTS});
+        DELETE FROM benefit_plans        WHERE tenant_id = ANY(${DEMO_TENANTS});
+        DELETE FROM integration_connections WHERE tenant_id = ANY(${DEMO_TENANTS});
+        DELETE FROM feedback_entries     WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM performance_reviews  WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM cycle_goals          WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM goals                WHERE tenant_id = ANY(${DEMO_TENANTS});
+       DELETE FROM review_cycles        WHERE tenant_id = ANY(${DEMO_TENANTS});
        DELETE FROM employees            WHERE tenant_id = ANY(${DEMO_TENANTS}) AND id <> ALL(${KEPT_EMPLOYEES});
        DELETE FROM idempotency_keys     WHERE tenant_id = ANY(${DEMO_TENANTS});`,
     )
