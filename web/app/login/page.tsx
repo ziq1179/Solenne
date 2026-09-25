@@ -39,15 +39,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-950 px-4">
+    <div className="grid min-h-screen place-items-center bg-paper px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center justify-center gap-2">
-          <CalendarClock className="h-7 w-7 text-sky-400" />
-          <div className="text-xl font-semibold text-slate-100">
-            Solenne <span className="text-sky-400">ESS</span>
+          <CalendarClock className="h-7 w-7 text-brass" />
+          <div className="font-display text-xl text-ink">
+            Solenne <span className="text-brass">ESS</span>
           </div>
         </div>
-        <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-line bg-paper p-6">
           <div>
             <Label>Tenant subdomain</Label>
             <Input
@@ -84,15 +84,15 @@ export default function LoginPage() {
             Sign in
           </Button>
         </form>
-        <p className="mt-6 text-center text-xs text-slate-500">
+        <p className="mt-6 text-center text-xs text-graphite-soft">
           New here?{' '}
-          <Link href="/signup" className="text-sky-400 hover:underline">
+          <Link href="/signup" className="text-brass hover:underline">
             Create a workspace
           </Link>
         </p>
-        <p className="mt-2 text-center text-xs text-slate-500">
-          Demo: <code className="text-slate-400">acme</code> / <code className="text-slate-400">aisha@acme.com</code> /{' '}
-          <code className="text-slate-400">employee123</code>
+        <p className="mt-2 text-center text-xs text-graphite-soft">
+          Demo: <code className="text-graphite-faint">acme</code> / <code className="text-graphite-faint">aisha@acme.com</code> /{' '}
+          <code className="text-graphite-faint">employee123</code>
         </p>
       </div>
     </div>

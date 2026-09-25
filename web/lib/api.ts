@@ -119,6 +119,95 @@ export interface LeaveTypeBalanceRow {
   remainingDays: number
 }
 
+/* ── Notifications ──────────────────────────────────────────────────────── */
+
+export interface Notification {
+  id: string
+  type: string
+  title: string
+  body: string | null
+  entityType: string
+  entityId: string
+  isRead: boolean
+  createdAt: string
+}
+
+/* ── Billing ────────────────────────────────────────────────────────────── */
+
+export interface Subscription {
+  id: string
+  tenantId: string
+  plan: string
+  status: string
+  trialEndsAt: string | null
+  currentPeriodStart: string
+  currentPeriodEnd: string
+  seatLimit: number
+  seatsUsed: number
+}
+
+export interface UsageRow {
+  metric: string
+  total: number
+  lastAt: string | null
+}
+
+export const PLAN_NAMES: Record<string, string> = {
+  trial: 'Trial',
+  core: 'Core',
+  grow: 'Grow',
+  enterprise: 'Enterprise',
+}
+
+export const PLAN_SEAT_LIMITS: Record<string, number> = {
+  trial: 5,
+  core: 25,
+  grow: 100,
+  enterprise: 1000,
+}
+
+/* ── ATS / Recruitment ──────────────────────────────────────────────────── */
+
+export interface JobOpening {
+  id: string
+  title: string
+  departmentId: string | null
+  departmentName: string | null
+  locationId: string | null
+  locationName: string | null
+  employmentType: string
+  salaryMin: string | null
+  salaryMax: string | null
+  currency: string
+  description: string | null
+  requirements: string | null
+  headcount: number
+  status: string
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Candidate {
+  id: string
+  jobOpeningId: string
+  firstName: string
+  lastName: string
+  email: string
+  phone: string | null
+  resumeText: string | null
+  source: string
+  stage: string
+  rating: number | null
+  notes: string | null
+  hiredEmployeeId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export const JOB_STATUSES = ['draft', 'pending_approval', 'open', 'on_hold', 'closed'] as const
+export const PIPELINE_STAGES = ['sourced', 'applied', 'screening', 'interview', 'offer', 'hired', 'rejected'] as const
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://backend-liard-chi-84.vercel.app'
 const ACCESS_KEY = 'solenne.access'
 const REFRESH_KEY = 'solenne.refresh'
@@ -262,6 +351,118 @@ export const api = {
 
   leaveSummary: (year = new Date().getFullYear()) =>
     request<LeaveSummaryRow[]>(`/reports/leave-summary?year=${year}`, { method: 'GET' }, true, true),
+
+  /* ── Notifications ────────────────────────────────────────────────────── */
+
+  notifications: (opts?: { unread?: boolean; type?: string; page?: number; pageSize?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.unread) p.set('unread', 'true')
+    if (opts?.type) p.set('type', opts.type)
+    if (opts?.page) p.set('page', String(opts.page))
+    if (opts?.pageSize) p.set('pageSize', String(opts.pageSize))
+    const qs = p.toString()
+    return request<{ data: Notification[]; page: number; pageSize: number; total: number }>(
+      `/notifications${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+      true,
+      true,
+    )
+  },
+
+  unreadCount: () => request<{ n: number }>('/notifications/unread-count', { method: 'GET' }, true, true),
+
+  markRead: (notificationId: string) =>
+    request<{ id: string }>(`/notifications/${notificationId}/read`, { method: 'PATCH' }, true, true),
+
+  markAllRead: () =>
+    request<{ updated: number }>('/notifications/read-all', { method: 'POST' }, true, true),
+
+  /* ── Billing ──────────────────────────────────────────────────────────── */
+
+  subscription: () => request<Subscription>('/billing/subscription', { method: 'GET' }, true, true),
+
+  setPlan: (plan: string) =>
+    request<Subscription>('/billing/subscription/plan', { method: 'PATCH', body: JSON.stringify({ plan }) }, true, true),
+
+  usage: (opts?: { metric?: string; from?: string; to?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.metric) p.set('metric', opts.metric)
+    if (opts?.from) p.set('from', opts.from)
+    if (opts?.to) p.set('to', opts.to)
+    const qs = p.toString()
+    return request<UsageRow[]>(`/billing/usage${qs ? `?${qs}` : ''}`, { method: 'GET' }, true, true)
+  },
+
+  /* ── ATS / Recruitment ────────────────────────────────────────────────── */
+
+  jobOpenings: (opts?: { status?: string; departmentId?: string; page?: number; pageSize?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.status) p.set('status', opts.status)
+    if (opts?.departmentId) p.set('departmentId', opts.departmentId)
+    if (opts?.page) p.set('page', String(opts.page))
+    if (opts?.pageSize) p.set('pageSize', String(opts.pageSize))
+    const qs = p.toString()
+    return request<{ data: JobOpening[]; page: number; pageSize: number; total: number }>(
+      `/job-openings${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+      true,
+      true,
+    )
+  },
+
+  createJobOpening: (body: Record<string, unknown>, idempotencyKey: string) =>
+    request<JobOpening>(
+      '/job-openings',
+      { method: 'POST', body: JSON.stringify(body), headers: { 'Idempotency-Key': idempotencyKey } },
+      true,
+      true,
+    ),
+
+  jobOpening: (jobId: string) =>
+    request<JobOpening>(`/job-openings/${jobId}`, { method: 'GET' }, true, true),
+
+  candidates: (jobId: string, opts?: { stage?: string; page?: number; pageSize?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.stage) p.set('stage', opts.stage)
+    if (opts?.page) p.set('page', String(opts.page))
+    if (opts?.pageSize) p.set('pageSize', String(opts.pageSize))
+    const qs = p.toString()
+    return request<{ data: Candidate[]; page: number; pageSize: number; total: number }>(
+      `/job-openings/${jobId}/candidates${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+      true,
+      true,
+    )
+  },
+
+  candidate: (candidateId: string) =>
+    request<Candidate>(`/candidates/${candidateId}`, { method: 'GET' }, true, true),
+
+  transitionCandidate: (candidateId: string, stage: string) =>
+    request<Candidate>(
+      `/candidates/${candidateId}/transition`,
+      { method: 'POST', body: JSON.stringify({ stage }) },
+      true,
+      true,
+    ),
+
+  /* ── AI Agent ──────────────────────────────────────────────────────────── */
+
+  chat: (body: { message: string; conversationId?: string }) =>
+    request<{ reply: string; conversationId: string; toolCalls: unknown[] }>(
+      '/ai/chat',
+      { method: 'POST', body: JSON.stringify(body) },
+      true,
+      true,
+    ),
+
+  searchPolicy: (query: string) =>
+    request<{ results: { content: string; document_title: string; similarity: number }[] }>(
+      '/ai/search-policy',
+      { method: 'POST', body: JSON.stringify({ query }) },
+      true,
+      true,
+    ),
 }
 
 export function uuid(): string {

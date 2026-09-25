@@ -97,18 +97,18 @@ function LeaveWorkspace({ employeeId }: { employeeId: string }) {
         {requests.isPending ? (
           <Spinner />
         ) : (requests.data ?? []).length === 0 ? (
-          <p className="text-sm text-slate-500">No requests yet.</p>
+          <p className="text-sm text-wine-soft">No requests yet.</p>
         ) : (
           <ul className="space-y-2">
             {(requests.data ?? []).map((r) => (
-              <li key={r.id} className="rounded-lg bg-slate-800/40 px-3 py-2">
+              <li key={r.id} className="rounded-lg bg-wine-tint px-3 py-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-200">
+                  <span className="text-sm font-medium text-wine-ink">
                     {nameById.get(r.leaveTypeId) ?? 'Leave'} · {r.startDate} → {r.endDate}
                   </span>
                   <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
                 </div>
-                <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
+                <div className="mt-1 flex items-center justify-between text-xs text-wine-soft">
                   <span>{r.daysRequested} day(s) requested</span>
                   {r.reason && <span className="truncate pl-4">{r.reason}</span>}
                 </div>

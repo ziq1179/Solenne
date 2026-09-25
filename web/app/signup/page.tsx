@@ -50,15 +50,15 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-950 px-4">
+    <div className="grid min-h-screen place-items-center bg-paper px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center justify-center gap-2">
-          <CalendarClock className="h-7 w-7 text-sky-400" />
-          <div className="text-xl font-semibold text-slate-100">
-            Solenne <span className="text-sky-400">ESS</span>
+          <CalendarClock className="h-7 w-7 text-brass" />
+          <div className="font-display text-xl text-ink">
+            Solenne <span className="text-brass">ESS</span>
           </div>
         </div>
-        <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-line bg-paper p-6">
           <div>
             <Label>Company name</Label>
             <Input
@@ -127,9 +127,9 @@ export default function SignupPage() {
             Create workspace
           </Button>
         </form>
-        <p className="mt-6 text-center text-xs text-slate-500">
+        <p className="mt-6 text-center text-xs text-graphite-soft">
           Already have a workspace?{' '}
-          <Link href="/login" className="text-sky-400 hover:underline">
+          <Link href="/login" className="text-brass hover:underline">
             Sign in
           </Link>
         </p>

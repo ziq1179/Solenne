@@ -1,19 +1,79 @@
 @import "tailwindcss";
 
-:root {
-  --background: #020617;
-  --foreground: #e2e8f0;
-}
+/* ============================================================================
+   Solenne — Meridian (a light "paper & ink" ESS).
+   Headings: Fraunces (serif) · Body: Inter · Mono: Geist Mono
+    Module accents: brass (Core HR) wine (Leave) forest (Payroll)
+       plum (Reports/Performance) cobalt (ESS/Self-Service) teal (Recruitment)
+       bronze (Billing) — see AUDIT-MODULE-ACCENTS.md for full registry
+   ========================================================================== */
 
+/* Map Meridian palette + module accents into Tailwind theme tokens */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: #fafaf8 saturate(0.02) hue-rotate(0deg);
+  --color-foreground: var(--ink);
+
+  /* -- neutrals ---------------------------------------------------------- */
+  --color-paper: #fafaf8;
+  --color-paper-dim: #f1f1ef;
+  --color-paper-deep: #ebeae6;
+  --color-line: #e2e1dc;
+  --color-line-dark: #d5d3cc;
+  --color-graphite: #3a3d44;
+  --color-graphite-soft: #6b6e77;
+  --color-graphite-faint: #9b9ea4;
+  --color-ink: #16213d;
+
+  /* -- module accents ----------------------------------------------------- */
+  --color-brass: #b08d57;
+  --color-brass-soft: #c2a96e;
+  --color-brass-tint: #f6efe3;
+  --color-brass-ink: #4a3b22;
+  --color-wine: #7a3b46;
+  --color-wine-soft: #95505c;
+  --color-wine-tint: #f6eaec;
+  --color-wine-ink: #3d1a21;
+  --color-forest: #2e5339;
+  --color-forest-soft: #4d7159;
+  --color-forest-tint: #eaf1eb;
+  --color-forest-ink: #1a2e20;
+  --color-plum: #5b3c6f;
+  --color-plum-soft: #74538a;
+  --color-plum-tint: #f1eaf4;
+  --color-plum-ink: #2e1d39;
+  --color-cobalt: #3b5c8c;
+  --color-cobalt-soft: #5a76a1;
+  --color-cobalt-tint: #ebf0f7;
+  --color-cobalt-ink: #1c2c47;
+  --color-teal: #2f6f6b;
+  --color-teal-soft: #4a8884;
+  --color-teal-tint: #e9f2f1;
+  --color-teal-ink: #183735;
+  --color-bronze: #8b7355;
+  --color-bronze-soft: #a38e72;
+  --color-bronze-tint: #f3ede6;
+  --color-bronze-ink: #3d3020;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+.card-title {
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--font-mono), ui-monospace, monospace;
 }

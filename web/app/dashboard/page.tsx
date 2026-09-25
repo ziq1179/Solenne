@@ -101,7 +101,7 @@ function BalancesCard() {
                 <td className="py-2 pr-4 text-slate-200">{nameById.get(b.leaveTypeId) ?? 'Leave'}</td>
                 <td className="py-2 pr-4 text-slate-400">{b.accruedDays}</td>
                 <td className="py-2 pr-4 text-slate-400">{b.usedDays}</td>
-                <td className="py-2 font-medium text-sky-400">{b.remainingDays}</td>
+                <td className="py-2 font-medium text-cobalt">{b.remainingDays}</td>
               </tr>
             ))}
           </tbody>
@@ -165,10 +165,10 @@ function RequestsCard() {
       ) : (
         <ul className="space-y-2">
           {requests.data.slice(0, 5).map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-800/40 px-3 py-2">
+            <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg bg-cobalt-tint px-3 py-2">
               <div className="flex items-center gap-2">
-                <Plane className="h-4 w-4 text-slate-500" />
-                <span className="text-sm text-slate-200">
+                <Plane className="h-4 w-4 text-cobalt" />
+                <span className="text-sm text-cobalt-ink">
                   {nameById.get(r.leaveTypeId) ?? 'Leave'} · {r.startDate} → {r.endDate}
                 </span>
               </div>

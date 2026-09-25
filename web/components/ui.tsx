@@ -1,19 +1,19 @@
 'use client'
 
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
-import { LoaderCircle } from 'lucide-react'
 import { clsx } from 'clsx'
+import { LoaderCircle } from 'lucide-react'
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={clsx('rounded-xl border border-slate-800 bg-slate-900/60 p-5', className)}>
+    <div className={clsx('rounded-xl border border-line bg-paper p-5 shadow-sm', className)}>
       {children}
     </div>
   )
 }
 
-export function CardTitle({ children }: { children: ReactNode }) {
-  return <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">{children}</h2>
+export function CardTitle({ children, className }: { children: ReactNode; className?: string }) {
+  return <h2 className={clsx('mb-4 font-display text-sm font-medium uppercase tracking-wide text-graphite-soft', className)}>{children}</h2>
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -26,10 +26,10 @@ export function Button({ variant = 'primary', loading, className, children, disa
     <button
       className={clsx(
         'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50',
-        variant === 'primary' && 'bg-sky-500 text-white hover:bg-sky-400',
-        variant === 'ghost' && 'text-slate-300 hover:bg-slate-800',
-        variant === 'danger' && 'bg-rose-600 text-white hover:bg-rose-500',
-        variant === 'outline' && 'border border-slate-700 text-slate-200 hover:bg-slate-800',
+        variant === 'primary' && 'bg-brass text-paper hover:bg-brass-soft',
+        variant === 'ghost' && 'text-graphite-soft hover:bg-paper-dim hover:text-ink',
+        variant === 'danger' && 'bg-wine text-paper hover:bg-wine-soft',
+        variant === 'outline' && 'border border-line text-ink hover:border-line-dark hover:bg-paper-dim',
         className,
       )}
       disabled={disabled || loading}
@@ -45,7 +45,7 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
   return (
     <input
       className={clsx(
-        'w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none',
+        'w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-graphite-faint focus:border-brass focus:outline-none',
         className,
       )}
       {...rest}
@@ -57,7 +57,7 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
   return (
     <select
       className={clsx(
-        'w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none',
+        'w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-brass focus:outline-none',
         className,
       )}
       {...rest}
@@ -68,49 +68,56 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
 }
 
 export function Label({ children }: { children: ReactNode }) {
-  return <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-400">{children}</label>
+  return <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-graphite-soft">{children}</label>
+}
+
+const BADGE_TONES: Record<string, string> = {
+  slate: 'bg-paper-dim text-graphite-soft',
+  green: 'bg-forest-tint text-forest',
+  amber: 'bg-brass-tint text-brass-ink',
+  red: 'bg-wine-tint text-wine',
+  sky: 'bg-cobalt-tint text-cobalt',
 }
 
 export function Badge({ tone = 'slate', children }: { tone?: 'slate' | 'green' | 'amber' | 'red' | 'sky'; children: ReactNode }) {
-  const tones: Record<string, string> = {
-    slate: 'bg-slate-800 text-slate-300',
-    green: 'bg-emerald-500/15 text-emerald-400',
-    amber: 'bg-amber-500/15 text-amber-400',
-    red: 'bg-rose-500/15 text-rose-400',
-    sky: 'bg-sky-500/15 text-sky-400',
-  }
   return (
-    <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium', tones[tone])}>
+    <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium', BADGE_TONES[tone])}>
       {children}
     </span>
   )
 }
 
+export function CardLabel({ children }: { children: ReactNode }) {
+  return <div className="mb-1 text-xs font-medium uppercase tracking-wide text-graphite-soft">{children}</div>
+}
+
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="flex items-center gap-2 py-8 text-sm text-slate-400">
-      <LoaderCircle className="h-4 w-4 animate-spin" />
-      {label}
+    <div className="flex items-center gap-2">
+      <LoaderCircle className="h-4 w-4 animate-spin text-brass" />
+      <span className="text-sm text-graphite-soft">{label}</span>
     </div>
   )
 }
 
-export function Alert({ tone = 'red', children }: { tone?: 'red' | 'amber' | 'green' | 'sky'; children: ReactNode }) {
-  const tones: Record<string, string> = {
-    red: 'border-rose-800/60 bg-rose-950/40 text-rose-200',
-    amber: 'border-amber-800/60 bg-amber-950/40 text-amber-200',
-    green: 'border-emerald-800/60 bg-emerald-950/40 text-emerald-200',
-    sky: 'border-sky-800/60 bg-sky-950/40 text-sky-200',
-  }
-  return <div className={clsx('rounded-lg border px-4 py-3 text-sm', tones[tone])}>{children}</div>
+const ALERT_TONES: Record<string, string> = {
+  red: 'border-wine bg-wine-tint text-wine-ink',
+  amber: 'border-brass bg-brass-tint text-brass-ink',
+  green: 'border-forest bg-forest-tint text-forest-ink',
+  sky: 'border-cobalt bg-cobalt-tint text-cobalt-ink',
+  slate: 'border-line bg-paper-dim text-graphite-soft',
 }
 
-export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+export function Alert({ tone = 'red', children }: { tone?: 'red' | 'amber' | 'green' | 'sky' | 'slate'; children: ReactNode }) {
+  return <div className={clsx('rounded-lg border px-4 py-3 text-sm', ALERT_TONES[tone])}>{children}</div>
+}
+
+export function Stat({ label, value, hint, className }: { label: string; value: ReactNode; hint?: string; className?: string }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <div className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-slate-100">{value}</div>
-      {hint && <div className="mt-0.5 text-xs text-slate-500">{hint}</div>}
+    <div className={clsx('rounded-xl border border-line bg-paper p-4', className)}>
+      <div className="text-xs font-medium uppercase tracking-wide text-graphite-soft">{label}</div>
+      <div className="mt-1 font-display text-2xl font-medium text-ink">{value}</div>
+      {hint && <div className="mt-0.5 text-xs text-graphite-faint">{hint}</div>}
     </div>
   )
 }
